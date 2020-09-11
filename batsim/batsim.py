@@ -398,13 +398,14 @@ class Batsim(object):
         new_job_name =  new_job_name + Batsim.ATTEMPT_JOB_SEPARATOR + str(metadata["nb_resubmit"])
         # log in job metadata parent job and nb resubmit
 
-        self.register_job(
+        new_job = self.register_job(
                 new_job_name,
                 job.requested_resources,
                 job.requested_time,
                 job.profile)
 
         self.set_job_metadata(new_job_name, metadata)
+        return new_job
 
     def do_next_event(self):
         return self._read_bat_msg()
