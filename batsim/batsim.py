@@ -89,6 +89,25 @@ class Batsim(object):
         self._current_time += float(t)
         return self._current_time
 
+    
+    #here the code of the add probev event 
+    def add_probe(self, time,name ,trigger ,metrics ,filter ,smoothing ,ressources,hosts):
+        self._events_to_send.append({
+        "timestamp": time,
+        "type": "ADD_PROBE",
+        "data": {
+            "name": name,
+            "trigger": trigger,
+            "metrics": metrics,
+            "filter": filter,
+            "smoothing": "none",
+            "resources": {
+                "hosts": hosts
+        }
+  }
+}
+)
+
     def wake_me_up_at(self, time):
         self._events_to_send.append(
             {"timestamp": self.time(),
