@@ -1,0 +1,73 @@
+from batsim.batsim import BatsimScheduler, Batsim
+
+import sys
+import os
+from procset import ProcSet
+from itertools import islice
+
+
+class TestSched (BatsimScheduler):
+
+    def onAfterBatsimInit(self):
+        self.nb_completed_jobs = 0
+
+        self.jobs_completed = []
+        self.jobs_waiting = []
+
+        self.sched_delay = 0.005
+
+        self.openJobs = set()
+        self.availableResources = ProcSet((0,self.bs.nb_compute_resources-1))
+        
+
+
+    def scheduleJobs(self):
+        scheduledJobs = []
+
+        print('openJobs = ', self.openJobs)
+        print('available = ', self.availableResources)
+        print('premiereboucle')
+        job = None
+        if len(set(self.openJobs)) >0 :
+            job =set(self.openJobs).pop()
+        if(job !=None):
+            nb_res_req = job.requested_resources
+            if nb_res_req <= len(self.availableResources):
+             # Retrieve the *nb_res_req* first availables resources
+                job_alloc = ProcSet(*islice(self.availableResources, nb_res_req))
+                job.allocation = job_alloc
+                scheduledJobs.append(job)
+
+                self.availableResources -= job_alloc
+
+                self.openJobs.remove(job)
+            else :
+                self.openJobs.insert(0,job)
+             
+
+        # update time
+        self.bs.consume_time(self.sched_delay)
+
+        # send to uds
+        if len(scheduledJobs) > 0:
+            self.bs.execute_jobs(scheduledJobs)
+
+        print('openJobs = ', self.openJobs)
+        print('available = ', self.availableResources)
+        print('')
+
+
+
+        
+
+    def onJobSubmission(self, job):
+        if job.requested_resources > self.bs.nb_compute_resources:
+            self.bs.reject_jobs([job]) 
+        else:
+            self.openJobs.add(job)
+            self.scheduleJobs()
+
+    def onJobCompletion(self, job):
+        self.availableResources |= job.allocation
+        self.scheduleJobs()
+

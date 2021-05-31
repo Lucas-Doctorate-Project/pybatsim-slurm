@@ -91,14 +91,14 @@ class Batsim(object):
 
     
     #here the code of the add probev event 
-    def add_probe(self, time,name ,trigger ,metrics ,filter ,smoothing ,ressources,hosts):
+    def add_probe(self, name, hosts):
         self._events_to_send.append({
-        "timestamp": time,
+        "timestamp": 0.0,
         "type": "ADD_PROBE",
         "data": {
             "name": name,
-            "trigger": trigger,
-            "metrics": metrics,
+            "trigger": "one-shot",
+            "metrics": "power consumption",
             "filter": filter,
             "smoothing": "none",
             "resources": {
@@ -107,6 +107,12 @@ class Batsim(object):
   }
 }
 )
+    #a test to know if we can read the event
+    def test_probe(self,event):
+        dic = json.loads(event)
+        data = dic["data"]
+        print(data["name"] , " = " , data["value"])
+
 
     def wake_me_up_at(self, time):
         self._events_to_send.append(
@@ -641,6 +647,11 @@ class Batsim(object):
                     self.scheduler.onNotifyGenericEvent(event_data)
                 else:
                     raise Exception("Unknown NOTIFY type {}".format(notify_type))
+            #read the data of consumption from batsim
+            elif event_type =="PROBE_DATA" :
+                while(True) :
+                    test_probe(event)
+
             else:
                 raise Exception("Unknown event type {}".format(event_type))
 
@@ -657,7 +668,7 @@ class Batsim(object):
         }
         self.network.send(new_msg)
         self.logger.info("Message Sent to Batsim: {}".format(new_msg))
-
+        self.add_probe("my-amazing-probe","1")
 
         if finished_received:
             self.network.close()
