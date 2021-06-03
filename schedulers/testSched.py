@@ -18,12 +18,12 @@ class TestSched (BatsimScheduler):
 
         self.openJobs = set()
         self.availableResources = ProcSet((0,self.bs.nb_compute_resources-1))
+        self.bs.add_probe("test","1")
         
 
 
     def scheduleJobs(self):
         scheduledJobs = []
-
         print('openJobs = ', self.openJobs)
         print('available = ', self.availableResources)
         print('premiereboucle')

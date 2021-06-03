@@ -668,7 +668,6 @@ class Batsim(object):
         }
         self.network.send(new_msg)
         self.logger.info("Message Sent to Batsim: {}".format(new_msg))
-        self.add_probe("my-amazing-probe","1")
 
         if finished_received:
             self.network.close()
