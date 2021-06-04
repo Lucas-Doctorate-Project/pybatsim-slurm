@@ -6,7 +6,7 @@ from procset import ProcSet
 from itertools import islice
 
 
-class TestSched (BatsimScheduler):
+class TestProbOneShot (BatsimScheduler):
 
     def onAfterBatsimInit(self):
         self.nb_completed_jobs = 0
