@@ -18,7 +18,6 @@ class TestProbesOneShot (BatsimScheduler):
 
         self.openJobs = set()
         self.availableResources = ProcSet((0,self.bs.nb_compute_resources-1))
-        self.bs.add_probe('myprobe','1')
         
 
 
@@ -60,6 +59,7 @@ class TestProbesOneShot (BatsimScheduler):
         
 
     def onJobSubmission(self, job):
+        self.bs.add_probe('myprobe','1')
         if job.requested_resources > self.bs.nb_compute_resources:
             self.bs.reject_jobs([job]) 
         else:

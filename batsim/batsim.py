@@ -650,7 +650,6 @@ class Batsim(object):
             #read the data of consumption from batsim
             elif event_type =="PROBE_DATA" :
                 test_probe(event)
-                
             else:
                 raise Exception("Unknown event type {}".format(event_type))
 
