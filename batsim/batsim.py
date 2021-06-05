@@ -102,7 +102,7 @@ class Batsim(object):
             "filter": filter,
             "smoothing": "none",
             "resources": {
-                "hosts": hosts
+                "hosts": hosts,
         }
   }
 }
@@ -649,9 +649,8 @@ class Batsim(object):
                     raise Exception("Unknown NOTIFY type {}".format(notify_type))
             #read the data of consumption from batsim
             elif event_type =="PROBE_DATA" :
-                while(True) :
-                    test_probe(event)
-
+                test_probe(event)
+                
             else:
                 raise Exception("Unknown event type {}".format(event_type))
 

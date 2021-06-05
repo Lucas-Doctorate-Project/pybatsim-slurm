@@ -18,7 +18,7 @@ class TestProbesOneShot (BatsimScheduler):
 
         self.openJobs = set()
         self.availableResources = ProcSet((0,self.bs.nb_compute_resources-1))
-        self.bs.add_probe("test","1")
+        self.bs.add_probe('myprobe','1')
         
 
 
@@ -26,7 +26,6 @@ class TestProbesOneShot (BatsimScheduler):
         scheduledJobs = []
         print('openJobs = ', self.openJobs)
         print('available = ', self.availableResources)
-        print('premiereboucle')
         job = None
         if len(set(self.openJobs)) >0 :
             job =set(self.openJobs).pop()
@@ -42,8 +41,8 @@ class TestProbesOneShot (BatsimScheduler):
 
                 self.openJobs.remove(job)
             else :
-                self.openJobs.insert(0,job)
-             
+                self.openJobs.add(job)
+
 
         # update time
         self.bs.consume_time(self.sched_delay)
