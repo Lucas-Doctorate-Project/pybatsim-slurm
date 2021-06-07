@@ -93,24 +93,23 @@ class Batsim(object):
     #here the code of the add probev event 
     def add_probe(self, name, hosts):
         self._events_to_send.append({
-        "timestamp": 0.0,
-        "type": "ADD_PROBE",
-        "data": {
-            "name": name,
-            "trigger": "one-shot",
-            "metrics": "power consumption",
-            "filter": filter,
-            "smoothing": "none",
-            "resources": {
-                "hosts": hosts,
-        }
+    "timestamp": 0.0,
+    "type": "ADD_PROBE",
+    "data": {
+        "name": name,
+        "trigger": "one-shot",
+        "metrics": "power consumption",
+        "filter": "true",
+        "smoothing": "none",
+        "resources": {
+            "hosts": hosts
+    }
   }
 }
 )
     #a test to know if we can read the event
     def test_probe(self,event):
-        dic = json.loads(event)
-        data = dic["data"]
+        data = event["data"]
         print(data["name"] , " = " , data["value"])
 
 
@@ -649,7 +648,7 @@ class Batsim(object):
                     raise Exception("Unknown NOTIFY type {}".format(notify_type))
             #read the data of consumption from batsim
             elif event_type =="PROBE_DATA" :
-                test_probe(event)
+                self.test_probe(event)
             else:
                 raise Exception("Unknown event type {}".format(event_type))
 
