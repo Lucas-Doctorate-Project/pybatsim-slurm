@@ -91,14 +91,14 @@ class Batsim(object):
 
     
     #here the code of the add probev event 
-    def add_probe(self, name, hosts):
+    def add_probe(self, name, hosts, metrics):
         self._events_to_send.append({
     "timestamp": 0.0,
     "type": "ADD_PROBE",
     "data": {
         "name": name,
         "trigger": "one-shot",
-        "metrics": "power consumption",
+        "metrics": metrics,
         "filter": "true",
         "smoothing": "none",
         "resources": {
