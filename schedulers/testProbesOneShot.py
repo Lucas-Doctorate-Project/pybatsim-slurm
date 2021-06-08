@@ -59,7 +59,10 @@ class TestProbesOneShot (BatsimScheduler):
         
 
     def onJobSubmission(self, job):
-        self.bs.add_probe('myprobe','1-3','power consumption')
+        self.bs.add_probe('myprobe','1','power consumption')
+        self.bs.add_probe('myprobe','1','energy consumed')
+        self.bs.add_probe('myprobe','1','current load')
+        self.bs.add_probe('myprobe','1','average load')
         if job.requested_resources > self.bs.nb_compute_resources:
             self.bs.reject_jobs([job]) 
         else:
@@ -67,7 +70,6 @@ class TestProbesOneShot (BatsimScheduler):
             self.scheduleJobs()
 
     def onJobCompletion(self, job):
-        self.bs.add_probe('myprobe','1-3','energy consumed')
         self.availableResources |= job.allocation
         self.scheduleJobs()
 
