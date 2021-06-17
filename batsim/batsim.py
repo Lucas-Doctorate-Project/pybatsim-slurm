@@ -91,7 +91,7 @@ class Batsim(object):
 
     
     #here the code of the add probev event 
-    def add_probe(self, name, agg, aggregation_type, hosts, metrics):
+    def add_probe(self, name,aggregation_type, hosts, metrics):
         self._events_to_send.append({
     "timestamp": 0.0,
     "type": "ADD_PROBE",
@@ -101,8 +101,7 @@ class Batsim(object):
         "metrics": metrics,
         "filter": "true",
         "smoothing": "none",
-        "aggregate": agg,
-        "type of aggregation": aggregation_type,
+        "aggregation": aggregation_type,
         "resources": {
             "hosts": hosts
     }
@@ -111,12 +110,6 @@ class Batsim(object):
 )
     #a test to know if we can read the event
     def test_probe(self,event):
-        # data = event["data"]
-        # agg = data["aggregate"]
-        # if(agg) :
-        #     print(data["name"],data["value"])
-        # else :
-        #     print(data["value"])
         print(event)
 
 

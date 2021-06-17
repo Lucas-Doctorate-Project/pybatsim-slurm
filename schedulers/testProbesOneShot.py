@@ -59,24 +59,17 @@ class TestProbesOneShot (BatsimScheduler):
         
 
     def onJobSubmission(self, job):
-        self.bs.add_probe('myprobe','true','maximum', '1-3','power consumption')
-        self.bs.add_probe('myprobe','true','maximum', '1-3','energy consumed')
-        self.bs.add_probe('myprobe','true','maximum', '1-3','average load')
-        self.bs.add_probe('myprobe','true','maximum', '1-3','current load')
-
-        # self.bs.add_probe('myprobe','false','none','1-3','power consumption')
-        # self.bs.add_probe('myprobe','false','none', '1-3','power consumption')
+        self.bs.add_probe('myprobe','none', '1-3','power consumption')
         if job.requested_resources > self.bs.nb_compute_resources:
             self.bs.reject_jobs([job]) 
         else:
             self.openJobs.add(job)
             self.scheduleJobs()
+        self.bs.add_probe('myprobe','addition', '1-3','average load')
 
     def onJobCompletion(self, job):
-        # self.bs.add_probe('myprobe','true','addition', '1-3','current load')
-        # self.bs.add_probe('myprobe','true','addition','1-3','average load')
-        # self.bs.add_probe('myprobe','false','none','1-3','current load')
-        # self.bs.add_probe('myprobe','false','none', '1-3','average load')
+        self.bs.add_probe('myprobe','addition', '1-3','energy consumed')
         self.availableResources |= job.allocation
         self.scheduleJobs()
+        self.bs.add_probe('myprobe','addition','1-3','current load')
 
