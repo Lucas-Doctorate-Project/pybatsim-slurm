@@ -18,6 +18,7 @@ class TestProbesOneShot (BatsimScheduler):
 
         self.openJobs = set()
         self.availableResources = ProcSet((0,self.bs.nb_compute_resources-1))
+        self.probe = True
         
 
 
@@ -59,17 +60,64 @@ class TestProbesOneShot (BatsimScheduler):
         
 
     def onJobSubmission(self, job):
-        self.bs.add_probe('myprobe','none', '1-3','power consumption')
+        # self.bs.add_hosts_probe('myprobe','none', '1-3','power consumption')
         if job.requested_resources > self.bs.nb_compute_resources:
             self.bs.reject_jobs([job]) 
         else:
             self.openJobs.add(job)
             self.scheduleJobs()
-        self.bs.add_probe('myprobe','addition', '1-3','average load')
+        if(self.probe):
+            self.probe = False
+            self.bs.add_hosts_probe('myprobe1','none', '1-3','energy consumed')
+            self.bs.add_hosts_probe('myprobe2','none', '1-3','power consumption')
+            self.bs.add_hosts_probe('myprobe3','none', '1-3','current load')
+            self.bs.add_hosts_probe('myprobe4','none', '1-3','average load')
+            self.bs.add_hosts_probe('myprobe5','minimum', '1-3','energy consumed')
+            self.bs.add_hosts_probe('myprobe6','minimum', '1-3','power consumption')
+            self.bs.add_hosts_probe('myprobe7','minimum', '1-3','current load')
+            self.bs.add_hosts_probe('myprobe8','minimum', '1-3','average load')
+            self.bs.add_hosts_probe('myprobe9','maximum', '1-3','energy consumed')
+            self.bs.add_hosts_probe('myprobe10','maximum', '1-3','power consumption')
+            self.bs.add_hosts_probe('myprobe11','maximum', '1-3','current load')
+            self.bs.add_hosts_probe('myprobe12','maximum', '1-3','average load')
+            self.bs.add_hosts_probe('myprobe13','average', '1-3','energy consumed')
+            self.bs.add_hosts_probe('myprobe14','average', '1-3','power consumption')
+            self.bs.add_hosts_probe('myprobe15','average', '1-3','current load')
+            self.bs.add_hosts_probe('myprobe16','average', '1-3','average load')
+            self.bs.add_hosts_probe('myprobe17','addition', '1-3','energy consumed')
+            self.bs.add_hosts_probe('myprobe18','addition', '1-3','power consumption')
+            self.bs.add_hosts_probe('myprobe19','addition', '1-3','current load')
+            self.bs.add_hosts_probe('myprobe20','addition', '1-3','average load')
+            self.bs.add_links_probe('myprobe21','none', 'backbone' ,'power consumption')
+            self.bs.add_links_probe('myprobe22','none', 'backbone' ,'energy consumed')
+            self.bs.add_links_probe('myprobe23','none', 'backbone' ,'average load')
+            self.bs.add_links_probe('myprobe24','none', 'backbone' ,'current load')
+            self.bs.add_links_probe('myprobe25','minimum', 'backbone' ,'power consumption')
+            self.bs.add_links_probe('myprobe26','minimum', 'backbone' ,'energy consumed')
+            self.bs.add_links_probe('myprobe27','minimum', 'backbone' ,'average load')
+            self.bs.add_links_probe('myprobe28','minimum', 'backbone' ,'current load')
+            self.bs.add_links_probe('myprobe29','maximum', 'backbone' ,'power consumption')
+            self.bs.add_links_probe('myprobe30','maximum', 'backbone' ,'energy consumed')
+            self.bs.add_links_probe('myprobe31','maximum', 'backbone' ,'average load')
+            self.bs.add_links_probe('myprobe32','maximum', 'backbone' ,'current load')
+            self.bs.add_links_probe('myprobe33','average', 'backbone' ,'power consumption')
+            self.bs.add_links_probe('myprobe34','average', 'backbone' ,'energy consumed')
+            self.bs.add_links_probe('myprobe35','average', 'backbone' ,'average load')
+            self.bs.add_links_probe('myprobe36','average', 'backbone' ,'current load')
+            self.bs.add_links_probe('myprobe37','addition', 'backbone' ,'power consumption')
+            self.bs.add_links_probe('myprobe38','addition', 'backbone' ,'energy consumed')
+            self.bs.add_links_probe('myprobe39','addition', 'backbone' ,'average load')
+            self.bs.add_links_probe('myprobe40','addition', 'backbone' ,'current load')
 
     def onJobCompletion(self, job):
-        self.bs.add_probe('myprobe','addition', '1-3','energy consumed')
+        # self.bs.add_hosts_probe('myprobe9','none', '1-3','energy consumed')
+        # self.bs.add_hosts_probe('myprobe10','none', '1-3','power consumption')
+        # self.bs.add_hosts_probe('myprobe11','none', '1-3','current load')
+        # self.bs.add_hosts_probe('myprobe12','none', '1-3','average load')
+        # self.bs.add_links_probe('myprobe13','none', 'backbone' ,'power consumption')
+        # self.bs.add_links_probe('myprobe14','none', 'backbone' ,'energy consumed')
+        # self.bs.add_links_probe('myprobe15','none', 'backbone' ,'average load')
+        # self.bs.add_links_probe('myprobe16','none', 'backbone' ,'current load')
         self.availableResources |= job.allocation
         self.scheduleJobs()
-        self.bs.add_probe('myprobe','addition','1-3','current load')
 
