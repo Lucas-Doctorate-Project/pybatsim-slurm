@@ -88,6 +88,10 @@ class TestProbesOneShot (BatsimScheduler):
             self.bs.add_hosts_probe('myprobe18','addition', '1-3','power consumption')
             self.bs.add_hosts_probe('myprobe19','addition', '1-3','current load')
             self.bs.add_hosts_probe('myprobe20','addition', '1-3','average load')
+            self.bs.add_hosts_probe('myprobe41','median', '1-3','energy consumed')
+            self.bs.add_hosts_probe('myprobe42','median', '1-3','power consumption')
+            self.bs.add_hosts_probe('myprobe43','median', '1-3','current load')
+            self.bs.add_hosts_probe('myprobe44','median', '1-3','average load')
             self.bs.add_links_probe('myprobe22','none', 'backbone' ,'energy consumed')
             self.bs.add_links_probe('myprobe23','none', 'backbone' ,'average load')
             self.bs.add_links_probe('myprobe24','none', 'backbone' ,'current load')
@@ -102,7 +106,11 @@ class TestProbesOneShot (BatsimScheduler):
             self.bs.add_links_probe('myprobe36','average', 'backbone' ,'current load')
             self.bs.add_links_probe('myprobe38','addition', 'backbone' ,'energy consumed')
             self.bs.add_links_probe('myprobe39','addition', 'backbone' ,'average load')
-            self.bs.add_links_probe('myprobe40','addition', 'backbone' ,'current load')
+            self.bs.add_links_probe('myprobe45','addition', 'backbone' ,'current load')
+            self.bs.add_links_probe('myprobe46','median', 'backbone' ,'energy consumed')
+            self.bs.add_links_probe('myprobe47','median', 'backbone' ,'average load')
+            self.bs.add_links_probe('myprobe48','median', 'backbone' ,'current load')
+
 
     def onJobCompletion(self, job):
         # self.bs.add_hosts_probe('myprobe9','none', '1-3','energy consumed')
