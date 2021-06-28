@@ -97,7 +97,7 @@ class Batsim(object):
     "type": "ADD_PROBE",
     "data": {
         "name": name,
-        "trigger": "one-shot",
+        "trigger": "one shot",
         "metrics": metrics,
         "filter": "true",
         "smoothing": "none",
@@ -116,7 +116,7 @@ class Batsim(object):
     "type": "ADD_PROBE",
     "data": {
         "name": name,
-        "trigger": "one-shot",
+        "trigger": "one shot",
         "metrics": metrics,
         "filter": "true",
         "smoothing": "none",
