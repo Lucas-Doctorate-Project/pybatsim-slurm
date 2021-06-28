@@ -91,13 +91,13 @@ class Batsim(object):
 
     
     #here the code of the add probev event 
-    def add_hosts_probe(self, name,aggregation_type, hosts, metrics):
+    def add_hosts_probe_one_shot(self, name,aggregation_type, hosts, metrics):
         self._events_to_send.append({
     "timestamp": 0.0,
     "type": "ADD_PROBE",
     "data": {
         "name": name,
-        "trigger": "one shot",
+        "trigger": "one-shot",
         "metrics": metrics,
         "filter": "true",
         "smoothing": "none",
@@ -110,13 +110,51 @@ class Batsim(object):
 }
 )
 
-    def add_links_probe(self, name,aggregation_type, links, metrics):
+    def add_links_probe_one_shot(self, name,aggregation_type, links, metrics):
         self._events_to_send.append({
     "timestamp": 0.0,
     "type": "ADD_PROBE",
     "data": {
         "name": name,
-        "trigger": "one shot",
+        "trigger": "one-shot",
+        "metrics": metrics,
+        "filter": "true",
+        "smoothing": "none",
+        "aggregation": aggregation_type,
+        "object": "link",
+        "resources": {
+            "links": links
+    }
+  }
+}
+)
+
+    def add_hosts_probe_periodic(self, name,aggregation_type, hosts, metrics, period):
+        self._events_to_send.append({
+    "timestamp": 0.0,
+    "type": "ADD_PROBE",
+    "data": {
+        "name": name,
+        "trigger": "periodic",
+        "metrics": metrics,
+        "filter": "true",
+        "smoothing": "none",
+        "aggregation": aggregation_type,
+        "object": "host",
+        "resources": {
+            "hosts": hosts
+    }
+  }
+}
+)
+
+    def add_links_probe_periodic(self, name,aggregation_type, links, metrics, period):
+        self._events_to_send.append({
+    "timestamp": 0.0,
+    "type": "ADD_PROBE",
+    "data": {
+        "name": name,
+        "trigger": "periodic",
         "metrics": metrics,
         "filter": "true",
         "smoothing": "none",
