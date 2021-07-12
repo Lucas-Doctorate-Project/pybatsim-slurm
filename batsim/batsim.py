@@ -129,7 +129,7 @@ class Batsim(object):
 }
 )
 
-    def add_hosts_probe_periodic(self, name,aggregation_type, hosts, metrics, period):
+    def add_hosts_probe_periodic(self, name,aggregation_type, hosts, metrics, period, nb_sample):
         self._events_to_send.append({
     "timestamp": 0.0,
     "type": "ADD_PROBE",
@@ -142,13 +142,15 @@ class Batsim(object):
         "aggregation": aggregation_type,
         "object": "host",
         "resources": {
-            "hosts": hosts
+            "hosts": hosts,
+            "period": period,
+            "nb_samples": nb_sample
     }
   }
 }
 )
 
-    def add_links_probe_periodic(self, name,aggregation_type, links, metrics, period):
+    def add_links_probe_periodic(self, name,aggregation_type, links, metrics, period, nb_sample):
         self._events_to_send.append({
     "timestamp": 0.0,
     "type": "ADD_PROBE",
@@ -161,7 +163,9 @@ class Batsim(object):
         "aggregation": aggregation_type,
         "object": "link",
         "resources": {
-            "links": links
+            "links": links,
+            "period": period,
+            "nb sample" : nb_sample
     }
   }
 }

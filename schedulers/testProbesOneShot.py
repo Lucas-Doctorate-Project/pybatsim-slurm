@@ -19,7 +19,7 @@ class TestProbesOneShot (BatsimScheduler):
         self.openJobs = set()
         self.availableResources = ProcSet((0,self.bs.nb_compute_resources-1))
         self.probe = True
-        
+
 
 
     def scheduleJobs(self):
@@ -57,60 +57,59 @@ class TestProbesOneShot (BatsimScheduler):
 
 
 
-        
+
 
     def onJobSubmission(self, job):
         # self.bs.add_hosts_probe('myprobe','none', '1-3','power consumption')
         if job.requested_resources > self.bs.nb_compute_resources:
-            self.bs.reject_jobs([job]) 
+            self.bs.reject_jobs([job])
         else:
             self.openJobs.add(job)
             self.scheduleJobs()
         if(self.probe):
             self.probe = False
-            self.bs.add_hosts_probe_one_shot('myprobe1','none', '1-3','energy consumed')
-            self.bs.add_hosts_probe_one_shot('myprobe2','none', '1-3','power consumption')
-            self.bs.add_hosts_probe_one_shot('myprobe3','none', '1-3','current load')
-            self.bs.add_hosts_probe_one_shot('myprobe4','none', '1-3','average load')
-            self.bs.add_hosts_probe_one_shot('myprobe5','minimum', '1-3','energy consumed')
-            self.bs.add_hosts_probe_one_shot('myprobe6','minimum', '1-3','power consumption')
-            self.bs.add_hosts_probe_one_shot('myprobe7','minimum', '1-3','current load')
-            self.bs.add_hosts_probe_one_shot('myprobe8','minimum', '1-3','average load')
-            self.bs.add_hosts_probe_one_shot('myprobe9','maximum', '1-3','energy consumed')
-            self.bs.add_hosts_probe_one_shot('myprobe10','maximum', '1-3','power consumption')
-            self.bs.add_hosts_probe_one_shot('myprobe11','maximum', '1-3','current load')
-            self.bs.add_hosts_probe_one_shot('myprobe12','maximum', '1-3','average load')
-            self.bs.add_hosts_probe_one_shot('myprobe13','average', '1-3','energy consumed')
-            self.bs.add_hosts_probe_one_shot('myprobe14','average', '1-3','power consumption')
-            self.bs.add_hosts_probe_one_shot('myprobe15','average', '1-3','current load')
-            self.bs.add_hosts_probe_one_shot('myprobe16','average', '1-3','average load')
-            self.bs.add_hosts_probe_one_shot('myprobe17','addition', '1-3','energy consumed')
-            self.bs.add_hosts_probe_one_shot('myprobe18','addition', '1-3','power consumption')
-            self.bs.add_hosts_probe_one_shot('myprobe19','addition', '1-3','current load')
-            self.bs.add_hosts_probe_one_shot('myprobe20','addition', '1-3','average load')
-            self.bs.add_hosts_probe_one_shot('myprobe41','median', '1-3','energy consumed')
-            self.bs.add_hosts_probe_one_shot('myprobe42','median', '1-3','power consumption')
-            self.bs.add_hosts_probe_one_shot('myprobe43','median', '1-3','current load')
-            self.bs.add_hosts_probe_one_shot('myprobe44','median', '1-3','average load')
-            self.bs.add_links_probe_one_shot('myprobe22','none', 'backbone' ,'energy consumed')
-            self.bs.add_links_probe_one_shot('myprobe23','none', 'backbone' ,'average load')
-            self.bs.add_links_probe_one_shot('myprobe24','none', 'backbone' ,'current load')
-            self.bs.add_links_probe_one_shot('myprobe26','minimum', 'backbone' ,'energy consumed')
-            self.bs.add_links_probe_one_shot('myprobe27','minimum', 'backbone' ,'average load')
-            self.bs.add_links_probe_one_shot('myprobe28','minimum', 'backbone' ,'current load')
-            self.bs.add_links_probe_one_shot('myprobe30','maximum', 'backbone' ,'energy consumed')
-            self.bs.add_links_probe_one_shot('myprobe31','maximum', 'backbone' ,'average load')
-            self.bs.add_links_probe_one_shot('myprobe32','maximum', 'backbone' ,'current load')
-            self.bs.add_links_probe_one_shot('myprobe34','average', 'backbone' ,'energy consumed')
-            self.bs.add_links_probe_one_shot('myprobe35','average', 'backbone' ,'average load')
-            self.bs.add_links_probe_one_shot('myprobe36','average', 'backbone' ,'current load')
-            self.bs.add_links_probe_one_shot('myprobe38','addition', 'backbone' ,'energy consumed')
-            self.bs.add_links_probe_one_shot('myprobe39','addition', 'backbone' ,'average load')
-            self.bs.add_links_probe_one_shot('myprobe45','addition', 'backbone' ,'current load')
-            self.bs.add_links_probe_one_shot('myprobe46','median', 'backbone' ,'energy consumed')
-            self.bs.add_links_probe_one_shot('myprobe47','median', 'backbone' ,'average load')
-            self.bs.add_links_probe_one_shot('myprobe48','median', 'backbone' ,'current load')
-
+            # self.bs.add_hosts_probe_one_shot('myprobe2','none', '1-3','power consumption')
+            # self.bs.add_hosts_probe_one_shot('myprobe3','none', '1-3','current load')
+            # self.bs.add_hosts_probe_one_shot('myprobe4','none', '1-3','average load')
+            # self.bs.add_hosts_probe_one_shot('myprobe5','minimum', '1-3','energy consumed')
+            # self.bs.add_hosts_probe_one_shot('myprobe6','minimum', '1-3','power consumption')
+            # self.bs.add_hosts_probe_one_shot('myprobe7','minimum', '1-3','current load')
+            # self.bs.add_hosts_probe_one_shot('myprobe8','minimum', '1-3','average load')
+            # self.bs.add_hosts_probe_one_shot('myprobe9','maximum', '1-3','energy consumed')
+            # self.bs.add_hosts_probe_one_shot('myprobe10','maximum', '1-3','power consumption')
+            # self.bs.add_hosts_probe_one_shot('myprobe11','maximum', '1-3','current load')
+            # self.bs.add_hosts_probe_one_shot('myprobe12','maximum', '1-3','average load')
+            # self.bs.add_hosts_probe_one_shot('myprobe13','average', '1-3','energy consumed')
+            # self.bs.add_hosts_probe_one_shot('myprobe14','average', '1-3','power consumption')
+            # self.bs.add_hosts_probe_one_shot('myprobe15','average', '1-3','current load')
+            # self.bs.add_hosts_probe_one_shot('myprobe16','average', '1-3','average load')
+            # self.bs.add_hosts_probe_one_shot('myprobe17','addition', '1-3','energy consumed')
+            # self.bs.add_hosts_probe_one_shot('myprobe18','addition', '1-3','power consumption')
+            # self.bs.add_hosts_probe_one_shot('myprobe19','addition', '1-3','current load')
+            # self.bs.add_hosts_probe_one_shot('myprobe20','addition', '1-3','average load')
+            # self.bs.add_hosts_probe_one_shot('myprobe41','median', '1-3','energy consumed')
+            # self.bs.add_hosts_probe_one_shot('myprobe42','median', '1-3','power consumption')
+            # self.bs.add_hosts_probe_one_shot('myprobe43','median', '1-3','current load')
+            # self.bs.add_hosts_probe_one_shot('myprobe44','median', '1-3','average load')
+            # self.bs.add_links_probe_one_shot('myprobe22','none', 'backbone' ,'energy consumed')
+            # self.bs.add_links_probe_one_shot('myprobe23','none', 'backbone' ,'average load')
+            # self.bs.add_links_probe_one_shot('myprobe24','none', 'backbone' ,'current load')
+            # self.bs.add_links_probe_one_shot('myprobe26','minimum', 'backbone' ,'energy consumed')
+            # self.bs.add_links_probe_one_shot('myprobe27','minimum', 'backbone' ,'average load')
+            # self.bs.add_links_probe_one_shot('myprobe28','minimum', 'backbone' ,'current load')
+            # self.bs.add_links_probe_one_shot('myprobe30','maximum', 'backbone' ,'energy consumed')
+            # self.bs.add_links_probe_one_shot('myprobe31','maximum', 'backbone' ,'average load')
+            # self.bs.add_links_probe_one_shot('myprobe32','maximum', 'backbone' ,'current load')
+            # self.bs.add_links_probe_one_shot('myprobe34','average', 'backbone' ,'energy consumed')
+            # self.bs.add_links_probe_one_shot('myprobe35','average', 'backbone' ,'average load')
+            # self.bs.add_links_probe_one_shot('myprobe36','average', 'backbone' ,'current load')
+            # self.bs.add_links_probe_one_shot('myprobe38','addition', 'backbone' ,'energy consumed')
+            # self.bs.add_links_probe_one_shot('myprobe39','addition', 'backbone' ,'average load')
+            # self.bs.add_links_probe_one_shot('myprobe45','addition', 'backbone' ,'current load')
+            # self.bs.add_links_probe_one_shot('myprobe46','median', 'backbone' ,'energy consumed')
+            # self.bs.add_links_probe_one_shot('myprobe47','median', 'backbone' ,'average load')
+            # self.bs.add_links_probe_one_shot('myprobe48','median', 'backbone' ,'current load')
+            self.bs.add_hosts_probe_periodic( 'my-probe','addition', '1-3','power consumption', '1', '2')
 
     def onJobCompletion(self, job):
         # self.bs.add_hosts_probe('myprobe9','none', '1-3','energy consumed')
