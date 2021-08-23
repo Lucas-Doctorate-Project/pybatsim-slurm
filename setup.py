@@ -10,7 +10,6 @@ from setuptools import setup, find_packages, Command
 requirements = [
     "sortedcontainers",
     "pyzmq",
-    "redis",
     "pandas",
     "docopt==0.6.2",
     "procset",

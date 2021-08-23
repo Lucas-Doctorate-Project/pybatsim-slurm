@@ -9,7 +9,6 @@ import sys
 from .network import NetworkHandler
 
 from procset import ProcSet
-import redis
 import zmq
 import logging
 
@@ -303,17 +302,13 @@ class Batsim(object):
         })
 
     def get_job_and_profile(self, event):
-        if self.redis_enabled:
-            return self.redis.get_job_and_profile(event["data"]["job_id"])
+        json_dict = event["data"]["job"]
+        job = Job.from_json_dict(json_dict)
 
+        if "profile" in event["data"]:
+            profile = event["data"]["profile"]
         else:
-            json_dict = event["data"]["job"]
-            job = Job.from_json_dict(json_dict)
-
-            if "profile" in event["data"]:
-                profile = event["data"]["profile"]
-            else:
-                profile = {}
+            profile = {}
 
         return job, profile
 
@@ -454,15 +449,6 @@ class Batsim(object):
 
                 if self.dynamic_job_registration_enabled:
                     self.logger.warning("Dynamic registration of jobs is ENABLED. The scheduler must send a NOTIFY event of type 'registration_finished' to let Batsim end the simulation.")
-
-                self.redis_enabled = self.batconf["redis-enabled"]
-                redis_hostname = self.batconf["redis-hostname"]
-                redis_port = self.batconf["redis-port"]
-                redis_prefix = self.batconf["redis-prefix"]
-
-                if self.redis_enabled:
-                    self.redis = DataStorage(redis_prefix, redis_hostname,
-                                             redis_port)
 
                 # Retro compatibility for old Batsim API > 1.0 < 3.0
                 if "resources_data" in event_data:
@@ -646,43 +632,6 @@ class Batsim(object):
                 self.event_publisher.close()
 
         return not finished_received
-
-
-class DataStorage(object):
-    ''' High-level access to the Redis data storage system '''
-
-    def __init__(self, prefix, hostname='localhost', port=6379):
-        self.prefix = prefix
-        self.redis = redis.StrictRedis(host=hostname, port=port)
-
-    def get(self, key):
-        real_key = '{iprefix}:{ukey}'.format(iprefix=self.prefix,
-                                             ukey=key)
-        value = self.redis.get(real_key)
-        assert(value is not None), "Redis: No such key '{k}'".format(
-            k=real_key)
-        return value
-
-    def get_job_and_profile(self, job_id):
-        job_key = 'job_{job_id}'.format(job_id=job_id)
-        job_str = self.get(job_key).decode('utf-8')
-        job = Job.from_json_string(job_str)
-
-        profile_key = 'profile_{workload_id}!{profile_id}'.format(
-            workload_id=job_id.split(Batsim.WORKLOAD_JOB_SEPARATOR)[0],
-            profile_id=job.profile)
-        profile_str = self.get(profile_key).decode('utf-8')
-        profile = json.loads(profile_str)
-
-        return job, profile
-
-    def set_job(self, job_id, subtime, walltime, res):
-        real_key = '{iprefix}:{ukey}'.format(iprefix=self.prefix,
-                                             ukey=job_id)
-        json_job = json.dumps({"id": job_id, "subtime": subtime,
-                               "walltime": walltime, "res": res})
-        self.redis.set(real_key, json_job)
-
 
 class Job(object):
 
