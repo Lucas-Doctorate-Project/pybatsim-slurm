@@ -81,7 +81,7 @@ class CacheLocality(BatsimScheduler):
 
         assert self.bs.dynamic_job_registration_enabled, "Registration of dynamic jobs must be enabled for this scheduler to work"
         assert self.bs.ack_of_dynamic_jobs == False, "Acknowledgment of dynamic jobs must be disabled for this scheduler to work"
-
+        
         self.bs.register_profiles("w0", self.container_description["profiles"])
 
     def onAfterBatsimInit(self):
@@ -91,11 +91,8 @@ class CacheLocality(BatsimScheduler):
 
         self.openJobs = set()
         self.availableResources = ProcSet((0,self.bs.nb_compute_resources-1))
-        print("Avaliable resources init: ", self.availableResources)
         for availableResource in self.availableResources:
-            print("Type: ", type(availableResource))
             self.mapping_machine_container[availableResource] = []
-        print("Mapping: ", self.mapping_machine_container)
 
     def onBeforeEvents(self):
         """
@@ -120,15 +117,16 @@ class CacheLocality(BatsimScheduler):
             machine_candidates = self.list_machines_with_container(job_container)
             if (len(machine_candidates) != 0):
                 machine = machine_candidates[0]
+                machine = ProcSet((machine,machine)) # Convert the machine id to a ProcSet
             else:
                 if(len(self.availableResources) != 0):
-                    machine = self.availableResources[0]
+                    machine = ProcSet(*islice(self.availableResources, 1))
                 else:
                     break
 
             # If the container is not on the machine, download it there, before scheduling the job
             if (job_container != None and 
-                job_container not in self.mapping_machine_container[machine]):
+                job_container not in self.mapping_machine_container[int(str(machine))]):
 
                 # Create a dynamic job
                 new_job = self.bs.register_job(
@@ -141,7 +139,7 @@ class CacheLocality(BatsimScheduler):
                 self.container_jobs_scheduled.append(new_job)
 
                 # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
-                new_job.allocation = ProcSet(machine, machine)
+                new_job.allocation = machine
                 scheduledJobs.append(new_job)
 
                 # Save where job should be executed, and what is the container it depends on
@@ -158,12 +156,12 @@ class CacheLocality(BatsimScheduler):
                 self.global_scheduledJobs.append(job)
 
                 # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
-                job.allocation = ProcSet(machine, machine)
+                job.allocation = machine
                 scheduledJobs.append(job)
 
                 self.nb_jobs += 1
-                
-            self.availableResources = self.availableResources[1:]
+  
+            self.availableResources -= machine
             self.openJobs.remove(job)
 
             # If all jobs were processed, break the loop to avoid iterating in the first loop for nothing
@@ -183,6 +181,7 @@ class CacheLocality(BatsimScheduler):
             self.openJobs.add(job)
         self.scheduleJobs()
     
+
     def onJobCompletion(self, job):
         is_original_job = False
         self.nb_completed_jobs += 1
@@ -213,23 +212,18 @@ class CacheLocality(BatsimScheduler):
         
         # If it was an original job that was completed, we need to free the machine used
         else:
+            is_original_job = True
             # Free the mapping_job_container to not waste memory
             if self.mapping_job_container.get(job.id) != None:
                 del self.mapping_job_container[job.id]
-            else:
-                is_original_job = True
+            #else:
+            #    is_original_job = True
 
             # Free resources (machines)
             if (len(self.availableResources) == 0):
-                if(is_original_job):
-                    self.availableResources = job.allocation
-                else:
-                    self.availableResources = ProcSet((job.allocation, job.allocation))
+                self.availableResources = job.allocation
             else:
-                if(is_original_job):
-                    self.availableResources += job.allocation
-                else:
-                    self.availableResources |= ProcSet((job.allocation, job.allocation))
+                self.availableResources |= job.allocation 
 
         # Check if the simulation is finished
         if(len(self.openJobs) == 0 and len(self.jobs_completed) == self.bs.nb_jobs_submitted):
