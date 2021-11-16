@@ -183,18 +183,16 @@ class CacheLocality(BatsimScheduler):
     
 
     def onJobCompletion(self, job):
-        is_original_job = False
         self.nb_completed_jobs += 1
         self.jobs_completed.append(job)
 
         # If the completed job is a dynamic job (container), we will use the same machine to compute the original job
         # that required such dynamic job.
-
         container_name = self.downloading_container_as_job(job)
         if (container_name != None):
             
             # Add the container in the machine
-            #for availableResource in self.availableResources:
+            # for availableResource in self.availableResources:
             machine = int(str(job.allocation))
             if(container_name not in self.mapping_machine_container[machine]):
                 self.mapping_machine_container[machine].append(container_name)
@@ -212,12 +210,9 @@ class CacheLocality(BatsimScheduler):
         
         # If it was an original job that was completed, we need to free the machine used
         else:
-            is_original_job = True
             # Free the mapping_job_container to not waste memory
             if self.mapping_job_container.get(job.id) != None:
                 del self.mapping_job_container[job.id]
-            #else:
-            #    is_original_job = True
 
             # Free resources (machines)
             if (len(self.availableResources) == 0):
