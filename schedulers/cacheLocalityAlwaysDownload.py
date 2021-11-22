@@ -74,6 +74,15 @@ class CacheLocalityAlwaysDownload(BatsimScheduler):
                     machine_candidates.append(machine)
             return machine_candidates            
 
+    def get_earliest_submitted_job(self):
+        selected_job = None
+        for job in self.openJobs:
+            if (selected_job == None):
+                selected_job = job
+            elif (selected_job.submit_time > job.submit_time):
+                selected_job = job
+        return selected_job
+
     def onSimulationBegins(self):
         """
         Verify if the correct flags has been set when the simulation begins
@@ -109,7 +118,7 @@ class CacheLocalityAlwaysDownload(BatsimScheduler):
 
         scheduledJobs = []
         while(len(self.openJobs) > 0 and len(self.availableResources) > 0):
-            job = list(self.openJobs)[0]
+            job = self.get_earliest_submitted_job()
             job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
 
             machine = ProcSet(*islice(self.availableResources, 1))
