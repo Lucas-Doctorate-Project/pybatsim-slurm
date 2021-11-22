@@ -115,13 +115,13 @@ class CacheLocalityWithLayers(BatsimScheduler):
                             if layer in list_of_layers_of_second_container:
                                 scores_machine_container[machine_id] += list_of_layers_of_second_container.get(layer)
                         
-                        layers_total_download_size = self.get_layers_total_download_size_from_container(job_container)
-                        if(scores_machine_container[machine_id] != 0 and layers_total_download_size != -1):
-                            scores_machine_container[machine_id] /= layers_total_download_size
-                        
-                        # If there is any problem with the container definition, some missing size in the .json file, for example, consider such container as invalid, so size 0
-                        else:
-                            scores_machine_container[machine_id] = 0
+                    layers_total_download_size = self.get_layers_total_download_size_from_container(job_container)
+                    if(scores_machine_container[machine_id] != 0 and layers_total_download_size != -1):
+                        scores_machine_container[machine_id] /= layers_total_download_size
+                    
+                    # If there is any problem with the container definition, some missing size in the .json file, for example, consider such container as invalid, so size 0
+                    else:
+                        scores_machine_container[machine_id] = 0
 
                 machine_candidates = sorted(scores_machine_container, key=scores_machine_container.get, reverse=True)
             
@@ -161,6 +161,7 @@ class CacheLocalityWithLayers(BatsimScheduler):
         The decion process. It will check if the machines have containers required by the jobs.
         If not, dybamic jobs will be created, and these jobs will represent the downloading of containers.
         """
+
         scheduledJobs = []
         while(len(self.openJobs) > 0):
             job = list(self.openJobs)[0]
@@ -198,11 +199,11 @@ class CacheLocalityWithLayers(BatsimScheduler):
 
                 # Create a dynamic job
                 new_job = self.bs.register_job(
-                        job.workload + '!' + job_container + "_job" + str(job.id.split("!")[1]) + "_" + str(self.nb_container_downloaded),
-                        1, 
-                        2000,
-                        new_profile_name, 
-                        subtime=None)
+                    job.workload + '!' + job_container + "_job" + str(job.id.split("!")[1]) + "_" + str(self.nb_container_downloaded),
+                    1, 
+                    2000,
+                    new_profile_name, 
+                    subtime=None)
                 
                 self.container_jobs_scheduled.append(new_job)
 
