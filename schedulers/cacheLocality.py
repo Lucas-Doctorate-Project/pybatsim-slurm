@@ -63,16 +63,69 @@ class CacheLocality(BatsimScheduler):
         else:
             return None
 
-    def list_machines_with_container(self, job_container):
-        machine_candidates = []
-        if(len(self.availableResources) == 0):
-            return []
+    def get_layers_from_container(self, job_container):
+        """
+        Get the layers of a job_cotainer and return as a list.
+        """
+
+        list_of_layers = self.container_description.get("profiles").get(job_container).get("layers")
+        if(list_of_layers != None):
+            return list_of_layers
         else:
+            return {}
+
+    def get_layers_total_download_size_from_container(self, job_container):
+        """
+        Get the layers of a job_cotainer and return as a list.
+        """
+
+        total_download_size = self.container_description.get("profiles").get(job_container).get("layers_total_download_size")
+        if(total_download_size != None):
+            return total_download_size
+        else:
+            return -1
+
+    def list_machines_with_container(self, job_container):
+        """
+        List machines that already have job_container
+        """
+
+        list_of_layers = self.get_layers_from_container(job_container)
+        machine_candidates = []
+        scores_machine_container = {}
+        if(len(self.availableResources) == 0):
+            return [], {}
+        else:
+            # Let's check if any machine available has the job_container
+            # or other container with common layers
             for machine in self.availableResources:
                 machine_id = int(str(machine))
-                if (job_container in self.mapping_machine_container[machine_id]):
+                scores_machine_container[machine_id] = 0
+                containers_in_machine = self.mapping_machine_container[machine_id]
+                # It has the job_container
+                if (job_container in containers_in_machine):
+                    scores_machine_container[machine_id] = 1 #self.get_layers_total_download_size_from_container(job_container)
                     machine_candidates.append(machine)
-            return machine_candidates            
+
+                # Check other container layers, and compute the percetage of matching
+                else:
+                    for container in containers_in_machine:
+                        list_of_layers_of_second_container = self.get_layers_from_container(container)
+                        for layer in list_of_layers:
+                            if layer in list_of_layers_of_second_container:
+                                scores_machine_container[machine_id] += list_of_layers_of_second_container.get(layer)
+                        
+                    layers_total_download_size = self.get_layers_total_download_size_from_container(job_container)
+                    if(scores_machine_container[machine_id] != 0 and layers_total_download_size != -1):
+                        scores_machine_container[machine_id] /= layers_total_download_size
+                    
+                    # If there is any problem with the container definition, some missing size in the .json file, for example, consider such container as invalid, so size 0
+                    else:
+                        scores_machine_container[machine_id] = 0
+
+                machine_candidates = sorted(scores_machine_container, key=scores_machine_container.get, reverse=True)
+            
+            return machine_candidates, scores_machine_container
 
     def get_earliest_submitted_job(self):
         selected_job = None
@@ -123,9 +176,11 @@ class CacheLocality(BatsimScheduler):
             job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
 
             # Search the best machine available, which means, one with the required container
-            machine_candidates = self.list_machines_with_container(job_container)
+            download_time_reduction = 0
+            machine_candidates, scores_machine_container = self.list_machines_with_container(job_container)
             if (len(machine_candidates) != 0):
                 machine = machine_candidates[0]
+                download_time_reduction = scores_machine_container[machine]
                 machine = ProcSet((machine,machine)) # Convert the machine id to a ProcSet
             else:
                 if(len(self.availableResources) != 0):
@@ -136,13 +191,25 @@ class CacheLocality(BatsimScheduler):
             # If the container is not on the machine, download it there, before scheduling the job
             if (job_container != None and 
                 job_container not in self.mapping_machine_container[int(str(machine))]):
+                new_profile_name = job_container
 
+                # If there are usefull layers in the allocated machine, create a new profile for such job, with a new delay
+                if (download_time_reduction != 0):
+                    new_profile_name = job_container + '_reduced_' + str(round(download_time_reduction, 2))
+                    new_profile = {}
+                    if new_profile_name not in self.container_description["profiles"].keys():
+                        new_profile[new_profile_name] = self.container_description["profiles"].get(job_container)
+                        new_delay = round(float(new_profile[new_profile_name]["delay"]) * download_time_reduction, 2)
+                        new_profile[new_profile_name]["delay"] -= new_delay
+                        self.container_description["profiles"][new_profile_name] = new_profile
+                        self.bs.register_profiles("w0", new_profile)
+                
                 # Create a dynamic job
                 new_job = self.bs.register_job(
                         job.workload + '!' + job_container + "_job" + str(job.id.split("!")[1]) + "_" + str(self.nb_container_downloaded),
                         1, 
                         2000,
-                        job_container, 
+                        new_profile_name, 
                         subtime=None)
                 
                 self.container_jobs_scheduled.append(new_job)
