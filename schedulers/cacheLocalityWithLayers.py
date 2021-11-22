@@ -72,7 +72,18 @@ class CacheLocalityWithLayers(BatsimScheduler):
         if(list_of_layers != None):
             return list_of_layers
         else:
-            return []
+            return {}
+
+    def get_layers_total_download_size_from_container(self, job_container):
+        """
+        Get the layers of a job_cotainer and return as a list.
+        """
+
+        total_download_size = self.container_description.get("profiles").get(job_container).get("layers_total_download_size")
+        if(total_download_size != None):
+            return total_download_size
+        else:
+            return -1
 
     def list_machines_with_container(self, job_container):
         """
@@ -91,23 +102,29 @@ class CacheLocalityWithLayers(BatsimScheduler):
                 machine_id = int(str(machine))
                 scores_machine_container[machine_id] = 0
                 containers_in_machine = self.mapping_machine_container[machine_id]
-
                 # It has the job_container
                 if (job_container in containers_in_machine):
-                    scores_machine_container[machine_id] = len(list_of_layers) / len(list_of_layers)
+                    scores_machine_container[machine_id] = 1 #self.get_layers_total_download_size_from_container(job_container)
                     machine_candidates.append(machine)
 
                 # Check other container layers, and compute the percetage of matching
                 else:
                     for container in containers_in_machine:
-                        list_of_layers_second_container = self.get_layers_from_container(container)
+                        list_of_layers_of_second_container = self.get_layers_from_container(container)
                         for layer in list_of_layers:
-                            if layer in list_of_layers_second_container:
-                                scores_machine_container[machine_id] += 1
-                        scores_machine_container[machine_id] /= len(list_of_layers)
+                            if layer in list_of_layers_of_second_container:
+                                scores_machine_container[machine_id] += list_of_layers_of_second_container.get(layer)
+                        
+                        layers_total_download_size = self.get_layers_total_download_size_from_container(job_container)
+                        if(scores_machine_container[machine_id] != 0 and layers_total_download_size != -1):
+                            scores_machine_container[machine_id] /= layers_total_download_size
+                        
+                        # If there is any problem with the container definition, some missing size in the .json file, for example, consider such container as invalid, so size 0
+                        else:
+                            scores_machine_container[machine_id] = 0
 
                 machine_candidates = sorted(scores_machine_container, key=scores_machine_container.get, reverse=True)
-
+            
             return machine_candidates, scores_machine_container
 
     def onSimulationBegins(self):
@@ -119,6 +136,7 @@ class CacheLocalityWithLayers(BatsimScheduler):
         assert self.bs.ack_of_dynamic_jobs == False, "Acknowledgment of dynamic jobs must be disabled for this scheduler to work"
         
         self.bs.register_profiles("w0", self.container_description["profiles"])
+        print("Created new profiles containers at onSimulationBegins: ", self.container_description)
 
     def onAfterBatsimInit(self):
         """
