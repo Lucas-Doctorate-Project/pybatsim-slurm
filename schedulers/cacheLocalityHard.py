@@ -100,7 +100,7 @@ class CacheLocalityHard(BatsimScheduler):
         """
         List machines that already have job_container
         """
-        print("\n\nHave in hand: ", job_container)
+
         list_of_layers = self.get_layers_from_container(job_container)
         machine_candidates = []
         scores_machine_container = {}
@@ -120,14 +120,10 @@ class CacheLocalityHard(BatsimScheduler):
 
                 # Check other container layers, and compute the percetage of matching
                 else:
-                    print("Looking for layers in common")
                     for container in containers_in_machine:
                         list_of_layers_of_second_container = self.get_layers_from_container(container)
-                        print("List of layers in the local container", list_of_layers_of_second_container)
                         for layer in list_of_layers:
-                            print("Layer of original job", layer)
                             if layer in list_of_layers_of_second_container:
-                                print("Found one")
                                 scores_machine_container[machine_id] += list_of_layers_of_second_container.get(layer)
                         
                     layers_total_download_size = self.get_layers_total_download_size_from_container(job_container)
@@ -145,7 +141,6 @@ class CacheLocalityHard(BatsimScheduler):
     def sort_open_jobs(self):
         sorted_jobs = {}
         scheduledJobs = []
-        print("Scheduling: ", self.openJobs, type(dict(self.openJobs)))
         sorted_open_jobs = sorted(self.openJobs, key=lambda kv: kv[1]['sub'])
 
 
@@ -186,22 +181,16 @@ class CacheLocalityHard(BatsimScheduler):
         """
 
         scheduledJobs = []
-        #print("Scheduling: ", self.openJobs, type(dict(self.openJobs)))
-        #sorted_open_jobs = sorted(self.openJobs, key=lambda kv: kv[1]['sub'])
-        #print("Sorted open jobs: ", sorted_open_jobs)
         while(len(self.openJobs) > 0):
             job = list(self.openJobs)[0]
-            print("Select job: ", job, type(job))
             job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
 
             # Search the best machine available, which means, one with the required container
             download_time_reduction = 0
             machine_candidates, scores_machine_container = self.list_machines_with_container(job_container)
-            print("Machine_candidates: ", machine_candidates, scores_machine_container)
             if (len(machine_candidates) != 0):
                 machine = machine_candidates[0]
                 download_time_reduction = scores_machine_container[machine]
-                print("Choose a machine", machine_candidates[0], scores_machine_container[machine])
                 machine = ProcSet((machine,machine)) # Convert the machine id to a ProcSet
             
             else:
@@ -215,10 +204,9 @@ class CacheLocalityHard(BatsimScheduler):
             if (job_container != None and 
                 job_container not in self.mapping_machine_container[int(str(machine))]):
                 new_profile_name = job_container
-                print("Job has container")
+
                 # If there are usefull layers in the allocated machine, create a new profile for such job, with a new delay
                 if (download_time_reduction != 0):
-                    print("JOb has match of layers")
                     new_profile_name = job_container + '_reduced_' + str(round(download_time_reduction, 2))
                     new_profile = {}
                     if new_profile_name not in self.container_description["profiles"].keys():
@@ -289,7 +277,6 @@ class CacheLocalityHard(BatsimScheduler):
     
 
     def onJobCompletion(self, job):
-        print("Completed: ", job)
         self.nb_completed_jobs += 1
         self.jobs_completed.append(job)
         machine_id = int(str(job.allocation))
@@ -298,7 +285,6 @@ class CacheLocalityHard(BatsimScheduler):
         # that required such dynamic job.
         container_name = self.downloading_container_as_job(job)
         if (container_name != None):
-            print("Dynamic job")
             # Add the container in the machine
             # for availableResource in self.availableResources:
             if(container_name not in self.mapping_machine_container[machine_id]):
@@ -314,11 +300,9 @@ class CacheLocalityHard(BatsimScheduler):
             if (job_related_to_dynamic_job != None):
                 scheduledJobs = [job_related_to_dynamic_job]
                 self.bs.execute_jobs(scheduledJobs)
-                print("Executing job that was waiting the dyn job: ", scheduledJobs)
         
         # If it was an original job that was completed, we need to free the machine used
         else:
-            print("Original job completed")
             # Free the mapping_job_container to not waste memory
             if self.mapping_job_container.get(job.id) != None:
                 del self.mapping_job_container[job.id]
@@ -331,7 +315,6 @@ class CacheLocalityHard(BatsimScheduler):
             
             # Iterate over the mapping_jobs_waiting_machines to search jobs waiting for this machine
             if (len(self.mapping_jobs_waiting_machines[machine_id]) != 0):
-                print("There are jobs waiting for this machine", self.mapping_jobs_waiting_machines[machine_id])
                 scheduledJobs = [self.mapping_jobs_waiting_machines[machine_id].pop(0)]
                 self.availableResources -= job.allocation
                 self.bs.execute_jobs(scheduledJobs)
