@@ -48,9 +48,6 @@ class CacheLocalityHard(BatsimScheduler):
         self.listOfResources = None
         self.openJobs = set()
 
-        #self.global_scheduledJobs = []
-
-        #self.container_jobs_scheduled = []
         self.container_jobs_executed = []
         self.original_jobs_scheduled = []
 
@@ -87,15 +84,6 @@ class CacheLocalityHard(BatsimScheduler):
         else:
             return -1
 
-    """
-    def list_machines_with_container(self, job_container):
-        machine_candidates = []
-        for machine in self.listOfResources:
-            machine_id = int(str(machine))
-            if (job_container in self.mapping_machine_container[machine_id]):
-                machine_candidates.append(machine)
-        return machine_candidates            
-    """
     def list_machines_with_container(self, job_container):
         """
         List machines that already have job_container
@@ -104,38 +92,26 @@ class CacheLocalityHard(BatsimScheduler):
         list_of_layers = self.get_layers_from_container(job_container)
         machine_candidates = []
         scores_machine_container = {}
-        if(len(self.availableResources) == 0):
+        if(len(self.listOfResources) == 0):
             return [], {}
         else:
             # Let's check if any machine available has the job_container
             # or other container with common layers
-            for machine in self.availableResources:
+            for machine in self.listOfResources:
                 machine_id = int(str(machine))
-                scores_machine_container[machine_id] = 0
                 containers_in_machine = self.mapping_machine_container[machine_id]
                 # It has the job_container
                 if (job_container in containers_in_machine):
                     scores_machine_container[machine_id] = 1 #self.get_layers_total_download_size_from_container(job_container)
                     machine_candidates.append(machine)
 
-                # Check other container layers, and compute the percetage of matching
-                else:
-                    for container in containers_in_machine:
-                        list_of_layers_of_second_container = self.get_layers_from_container(container)
-                        for layer in list_of_layers:
-                            if layer in list_of_layers_of_second_container:
-                                scores_machine_container[machine_id] += list_of_layers_of_second_container.get(layer)
-                        
-                    layers_total_download_size = self.get_layers_total_download_size_from_container(job_container)
-                    if(scores_machine_container[machine_id] != 0 and layers_total_download_size != -1):
-                        scores_machine_container[machine_id] /= layers_total_download_size
-                    
-                    # If there is any problem with the container definition, some missing size in the .json file, for example, consider such container as invalid, so size 0
-                    else:
-                        scores_machine_container[machine_id] = 0
+            # There is no machine with such container, then lets get any available one
+            if(len(machine_candidates) == 0):
+                for machine in self.availableResources:
+                    machine_id = int(str(machine))
+                    scores_machine_container[machine_id] = 0
+                    machine_candidates.append(machine)
 
-                machine_candidates = sorted(scores_machine_container, key=scores_machine_container.get, reverse=True)
-            
             return machine_candidates, scores_machine_container
 
     def get_earliest_submitted_job(self):
@@ -190,22 +166,17 @@ class CacheLocalityHard(BatsimScheduler):
 
             # Search the best machine available, which means, one with the required container
             download_time_reduction = 0
-            machine_candidates, scores_machine_container = self.list_machines_with_container(job_container)
+            machine_candidates, scores_machine_container = self.list_machines_with_container(job_container)       
             if (len(machine_candidates) != 0):
                 machine = machine_candidates[0]
                 download_time_reduction = scores_machine_container[machine]
                 machine = ProcSet((machine,machine)) # Convert the machine id to a ProcSet
-            
-            else:
-                if(len(self.availableResources) != 0):
-                    machine = ProcSet(*islice(self.availableResources, 1))
-                    #self.availableResources -= machine
-                else:
-                    break
 
             # If the container is not on the machine, download it there, before scheduling the job
             if (job_container != None and 
-                job_container not in self.mapping_machine_container[int(str(machine))]):
+                job_container not in self.mapping_machine_container[int(str(machine))] and
+                machine.issubset(self.availableResources) == True):
+                
                 new_profile_name = job_container
 
                 # If there are usefull layers in the allocated machine, create a new profile for such job, with a new delay
@@ -228,7 +199,6 @@ class CacheLocalityHard(BatsimScheduler):
                         new_profile_name, 
                         subtime=None)
                 
-                #self.container_jobs_scheduled.append(new_job)
 
                 # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
                 new_job.allocation = machine
@@ -246,8 +216,6 @@ class CacheLocalityHard(BatsimScheduler):
             # Or the container is already in the machine, or the job does not require a container, 
             # so the job can be scheduled
             else:
-                #self.global_scheduledJobs.append(job)
-
                 # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
                 job.allocation = machine
                 if(machine.issubset(self.availableResources) == False) :
