@@ -19,7 +19,7 @@ testIntervals: generate
 	cd ..; python3 -m coverage run -a schedulers/intervalContainer.py
 
 %/out_jobs.csv:
-	cd ..; python3 launch_expe.py --quiet tests/$*/expe.json || (rm -f $@; exit 1)
+	cd ..; pybatsim-experiment --quiet tests/$*/expe.json || (rm -f $@; exit 1)
 
 gantts: $(GANTTS_OUT)
 
