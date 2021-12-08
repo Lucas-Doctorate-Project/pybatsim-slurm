@@ -1,3 +1,7 @@
+.PHONY: test
+test:
+	make --directory=tests/
+
 .PHONY: doc
 doc: clean
 	sphinx-apidoc --force --output-dir=doc/apidoc/batsim/ batsim/
