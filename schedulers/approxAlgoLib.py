@@ -44,7 +44,6 @@ def LP(Cmax, Tmax, M, N, K, c, p, d, b, env):
     
     return status.value, out, out_e
 
-
 def to_integer_solution(x, M, N, K, c, p, d, b, env):
 
     #if the solution given is already integer, assign the environments correctly and return
@@ -98,12 +97,12 @@ def to_integer_solution(x, M, N, K, c, p, d, b, env):
             if np.sum(bip[subi + offset]) + x[i][e[1]] >= 1:
                 filler = 1 - np.sum(bip[subi + offset])
                 bip[subi + offset][e[1]] = filler
-                B.add_edge(subi + offset, subM + e[1], weight = (c[i][e[1]]+d[i][env[e[1]]])*x[i][e[1]])
+                B.add_edge(subi + offset, subM + e[1], weight = x[i][e[1]])
                 offset = offset + 1
             
             if x[i][e[1]] - filler > 0.001:
                 bip[subi + offset][e[1]] = bip[subi + offset][e[1]] + x[i][e[1]] - filler
-                B.add_edge(subi + offset, subM + e[1], weight = (c[i][e[1]]+d[i][env[e[1]]])*x[i][e[1]])
+                B.add_edge(subi + offset, subM + e[1], weight = x[i][e[1]])
             
             count = count + 1
 
