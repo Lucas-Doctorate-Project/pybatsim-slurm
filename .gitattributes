@@ -1,0 +1,5 @@
+# git specific files
+.gitattributes export-ignore
+.gitignore export-ignore
+.gitkeep export-ignore
+.mailmap export-ignore
