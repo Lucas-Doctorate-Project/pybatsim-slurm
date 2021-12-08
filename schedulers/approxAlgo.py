@@ -42,6 +42,7 @@ class ApproxAlgo(BatsimScheduler):
         self.jobs_waiting = []
         self.mapping_job_container = {}
         self.mapping_machine_container = {}
+        self.mapping_jobs_waiting_machines = {}
 
         self.mapping_job_container_approx_algo = {} # To be used with the Approx Algo.
         self.mapping_job_id = {}
@@ -190,7 +191,6 @@ class ApproxAlgo(BatsimScheduler):
 
         x_a, e_a = to_integer_solution(x, M, N, K, c, p, d, b, env)
 
-
         print("Integerized solution : ")
         print(x_a)
 
@@ -232,7 +232,7 @@ class ApproxAlgo(BatsimScheduler):
                 containers_cost_on_machine.append(container_cost)
 
                 if(self.mapping_container_id.get(job_container) == None):
-                    self.mapping_container_id[job_container] = container_id + len(self.mapping_container_id)
+                    self.mapping_container_id[container_id + len(self.mapping_container_id)] = job_container
                 self.mapping_job_container_approx_algo[job.id] = job_container
 
                 job_id += 1
@@ -291,7 +291,8 @@ class ApproxAlgo(BatsimScheduler):
         #self.verifyConstraintsLPAlgo(Cmax, Tmax, M, N, K, c, p, d, b, env)
         
         status, x, e = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
-        print("LP solution : ", status, e)
+        print("LP solution : ", status)
+        print("Solution e: ", e)
         print(str(np.round(x, 2)))
 
         print("Converting to integer")
@@ -328,7 +329,7 @@ class ApproxAlgo(BatsimScheduler):
                         allocation_dict[machine].append(job)
 
         print("The allocation dict is: ", allocation_dict)
-
+        return allocation_dict
 
     def onSimulationBegins(self):
         """
@@ -348,17 +349,18 @@ class ApproxAlgo(BatsimScheduler):
         """
         Update the set of Jobs and Resources after the simulation begins
         """
-
+        print("Inited")
         self.openJobs = set()
         self.availableResources = ProcSet((0,self.bs.nb_compute_resources-1))
         for availableResource in self.availableResources:
             self.mapping_machine_container[availableResource] = []
+            self.mapping_jobs_waiting_machines[availableResource] = []
 
     def onBeforeEvents(self):
         """
         Update Batsim time with some small delay before new events happen.
         """
-
+        print("Before events")
         if self.bs.time() >= self.time_next_update:
             self.time_next_update = math.floor(self.bs.time()) + self.update_period
 
@@ -370,11 +372,123 @@ class ApproxAlgo(BatsimScheduler):
         print("Scheduling: ", self.openJobs)
         scheduledJobs = []
         #self.convertOpenJobsToCostMatrix(self.openJobs, self.availableResources)
+        
+        # Get the allocation decisions
+        approx_algo_allocation = None 
+        allocation_decisions = None
         if(len(self.openJobs) == 7):
             print("Time to call LP")
             lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
-            self.convertLPSolutionToBatsimFormat(lp_solution)
+            approx_algo_allocation = self.convertLPSolutionToBatsimFormat(lp_solution)
+            print("approx_algo_allocation", approx_algo_allocation)
+        if (approx_algo_allocation != None):
+            allocation_decisions = approx_algo_allocation.copy()
 
+            for machine in allocation_decisions:
+                # Get machine and job_id
+                print("machine", machine)
+                for job_id in allocation_decisions[machine]:
+                    job = None
+                    for open_job in self.openJobs:
+                        if open_job.id == job_id:
+                            job = open_job
+                            break
+
+                    # Or the job is no on OpenJobs anymore, or it is a container that need to be downloaded
+                    if job != None:
+                        # TODO To implement here the dynamic jobs
+                        #if (is_container())
+                        job.allocation = ProcSet(machine,machine)
+                        self.mapping_jobs_waiting_machines[int(str(machine))].append(job)
+            print("Machines waiting", self.mapping_jobs_waiting_machines)
+
+        while(approx_algo_allocation != None and len(self.openJobs) > 0):
+            for machine in self.availableResources:
+                jobs_for_machine = self.mapping_jobs_waiting_machines[machine]
+                print("jobs_for_machine", jobs_for_machine)
+                if (len(jobs_for_machine) > 0):
+                    job = jobs_for_machine.pop(0)
+                    print("Selected machine", machine)
+                    print("Selected job", job)
+                    self.global_scheduledJobs.append(job)
+
+                    # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
+                    machine = ProcSet((machine,machine))
+                    job.allocation = machine
+                    scheduledJobs.append(job)
+
+                    self.nb_jobs += 1
+    
+                    self.availableResources -= machine
+                    self.openJobs.remove(job)
+            
+            # If all jobs were processed, break the loop to avoid iterating in the first loop for nothing
+            if(len(self.availableResources) == 0):
+                break
+                
+        print("Here!!")
+
+        # Update time
+        self.bs.consume_time(self.sched_delay)
+
+        # Send the scheduled jobs to Batsim
+        if len(scheduledJobs) > 0:
+            print("Sent to schedule", scheduledJobs)
+            self.bs.execute_jobs(scheduledJobs)
+
+        """
+        # Submitt one job per machine
+        while(approx_algo_allocation != None and len(self.openJobs) > 0):
+            for machine in allocation_decisions:
+                # Check if the machine is available. It will be not if it is still executing the last allocated job
+                print("Available", self.availableResources)
+                print(machine in self.availableResources)
+                if machine not in self.availableResources:
+                    break
+
+                # Get machine and job_id
+                print("machine", machine)
+                if (len(allocation_decisions[machine]) > 0):
+                    job_id = allocation_decisions[machine].pop(0)
+                print("job", job_id)
+
+                # Retrieve the full job description in OpenJobs
+                job = None
+                for open_job in self.openJobs:
+                    if open_job.id == job_id:
+                        job = open_job
+                        break
+
+                # If we found the job succesfully, we submitt it
+                if job != None:
+                    print("Selected job", job)
+                    
+                    self.global_scheduledJobs.append(job)
+
+                    # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
+                    machine = ProcSet((machine,machine))
+                    job.allocation = machine
+                    scheduledJobs.append(job)
+
+                    self.nb_jobs += 1
+    
+                    self.availableResources -= machine
+                    self.openJobs.remove(job)
+
+            # If all jobs were processed, break the loop to avoid iterating in the first loop for nothing
+            if(len(self.availableResources) == 0):
+                break
+                
+        print("Here!!")
+
+        # Update time
+        self.bs.consume_time(self.sched_delay)
+
+        # Send the scheduled jobs to Batsim
+        if len(scheduledJobs) > 0:
+            print("Sent to schedule", scheduledJobs)
+            self.bs.execute_jobs(scheduledJobs)
+        """
         """
         while(len(self.openJobs) > 0):
             job = self.get_earliest_submitted_job()
@@ -459,14 +573,17 @@ class ApproxAlgo(BatsimScheduler):
 
         """
     def onJobSubmission(self, job):
+        print("Submitted", job)
         if (self.downloading_container_as_job(job) == None):
             self.openJobs.add(job)
         self.scheduleJobs()
     
 
     def onJobCompletion(self, job):
+        print("Job completion", job)
         self.nb_completed_jobs += 1
         self.jobs_completed.append(job)
+        machine_id = int(str(job.allocation))
 
         # If the completed job is a dynamic job (container), we will use the same machine to compute the original job
         # that required such dynamic job.
@@ -500,9 +617,18 @@ class ApproxAlgo(BatsimScheduler):
             if (len(self.availableResources) == 0):
                 self.availableResources = job.allocation
             else:
-                self.availableResources |= job.allocation 
+                self.availableResources |= job.allocation
+            
+            # Iterate over the mapping_jobs_waiting_machines to search jobs waiting for this machine
+            if (len(self.mapping_jobs_waiting_machines[machine_id]) != 0):
+                print("There are jobs waiting for this machine: ", self.mapping_jobs_waiting_machines[machine_id])
+                scheduledJobs = [self.mapping_jobs_waiting_machines[machine_id].pop(0)]
+                self.availableResources -= job.allocation
+                self.bs.execute_jobs(scheduledJobs)
+                self.openJobs.remove(scheduledJobs[0])
 
         # Check if the simulation is finished
+        print("Verifying to finish", self.openJobs, self.jobs_completed, self.bs.nb_jobs_submitted)
         if(len(self.openJobs) == 0 and len(self.jobs_completed) == self.bs.nb_jobs_submitted):
             self.bs.notify_registration_finished()
             self.notify_already_sent = True
