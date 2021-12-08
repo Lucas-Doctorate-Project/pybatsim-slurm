@@ -151,7 +151,6 @@ def generate_dfs_io_profile(
     if nb_blocks_to_read == 0:
         real_locality = None
     else:
-        # import ipdb; ipdb.set_trace()
         real_locality = (
             nb_wanted_local_read - nb_blocks_to_read_local
         ) / nb_blocks_to_read
@@ -180,7 +179,6 @@ def generate_dfs_io_profile(
             # NOTE: We can also manage write location here (under HPC node or
             # not)
             row = index_of(io_alloc, random.choice(list(io_alloc)))
-            # import ipdb; ipdb.set_trace()
             comm_matrix[(row * len(io_alloc)) + col] += block_size_in_Bytes
 
         # Round robin trough the hosts
@@ -233,7 +231,6 @@ class SchedBebida(BatsimScheduler):
         for curr_interval in iter_intervals:
             if len(allocation) >= job.requested_resources:
                 break
-            # import ipdb; ipdb.set_trace()
             interval_size = len(curr_interval)
             self.logger.debug("Interval lookup: {}".format(curr_interval))
 
