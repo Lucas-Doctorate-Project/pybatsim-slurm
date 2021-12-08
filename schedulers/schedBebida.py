@@ -1,6 +1,6 @@
 """
 schedBebida
-~~~~~~~~~
+~~~~~~~~~~~
 
 This scheduler is the implementation of the BigData scheduler for the
 Bebida on batsim project.

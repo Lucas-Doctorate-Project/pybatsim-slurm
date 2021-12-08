@@ -304,7 +304,7 @@ class ComputeResource(Resource):
         :param time: the starting time after which a time slot is needed
 
         :param future_reservation: if future_reservation is set to True, it must not be
-        guaranteed that the resource is already freed by Batsim at the given time.
+          guaranteed that the resource is already freed by Batsim at the given time.
         """
         present_time = self._scheduler.time
         if time is None:

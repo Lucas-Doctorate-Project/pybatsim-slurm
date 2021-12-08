@@ -14,10 +14,10 @@ Library reference
 .. toctree::
    :maxdepth: 1
 
-   apidoc/modules
-   apidoc/schedulers
-   apidoc/batsim.tools
-   apidoc/batsim.sched.algorithms
+   apidoc/batsim/modules
+   apidoc/schedulers/modules
+   apidoc/batsim/batsim.tools
+   apidoc/batsim/batsim.sched.algorithms
 
 Indices and tables
 ==================
