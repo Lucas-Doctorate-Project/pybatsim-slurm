@@ -49,7 +49,7 @@ let
       doCheck = false;
 
       meta = with kapack.pkgs.lib; {
-        description = "Python API and Schedulers for Batsim";
+        description = "Python API and schedulers for Batsim";
         homepage = "https://gitlab.inria.fr/batsim/pybatsim";
         platforms = platforms.all;
         license = licenses.lgpl3;
