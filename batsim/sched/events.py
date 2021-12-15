@@ -1,8 +1,8 @@
 """
-    batsim.sched.events
-    ~~~~~~~~~~~~~~~~~~~
+batsim.sched.events
+~~~~~~~~~~~~~~~~~~~
 
-    This module provides handling of scheduling events.
+This module provides handling of scheduling events.
 """
 
 import logging
@@ -67,11 +67,11 @@ class LoggingEvent:
         return output.getvalue().strip()
 
     def to_csv_line(self):
-        '''def conv_obj(o):
-            try:
-                return o.__dict__
-            except (AttributeError, ValueError):
-                return str(o)'''
+        # def conv_obj(o):
+        #     try:
+        #         return o.__dict__
+        #     except (AttributeError, ValueError):
+        #         return str(o)
 
         data = {}
         for k, v in self.data.items():
@@ -87,12 +87,12 @@ class LoggingEvent:
                     new_v.append(e)
                 v = new_v
             data[k] = v
-        '''try:
-            data = json.dumps(data, default=lambda o: conv_obj(o))
-        except Exception as e:
-            raise ValueError(
-                "Error while dumping json data: {}"
-                .format(data))'''
+        # try:
+        #     data = json.dumps(data, default=lambda o: conv_obj(o))
+        # except Exception as e:
+        #     raise ValueError(
+        #         "Error while dumping json data: {}"
+        #         .format(data))
 
         output = io.StringIO()
         csvdata = [self.time, self.level, self.processed_jobs, self.open_jobs,
