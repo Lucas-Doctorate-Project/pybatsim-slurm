@@ -60,6 +60,216 @@ class ApproxAlgo(BatsimScheduler):
         self.container_jobs_executed = []
         self.original_jobs_scheduled = []
 
+
+    # ----------------------------- ApproxAlgo -----------------------------------------
+    def callsLPAlgo_example(self):
+        print("Example!! ")
+        N = 7
+        M = 3
+        K = 3
+
+        c =    [[3, 1, 1, 1, 1, 1, 1],
+                [3, 1, 1, 1, 1, 1, 1],
+                [3, 1, 1, 1, 1, 1, 1]]
+
+        p =    [[3, 1, 1, 1, 1, 1, 1],
+                [3, 1, 1, 1, 1, 1, 1],
+                [3, 1, 1, 1, 1, 1, 1]]
+
+        #d =    [[0, 0],
+        #        [0, 0],
+        #        [0, 0]]
+
+        #b =    [[0, 0],
+        #        [0, 0],
+        #        [0, 0]]
+
+        b =    [[1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1]]
+
+        d =    [[1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1]]                
+
+        env =  [0, 0, 0, 0, 0, 0, 0]
+        env =  [2, 0, 1, 1, 1, 0, 1]
+
+        Cmax = 12
+        Tmax = 4
+
+        print(type(c), type(Cmax))
+
+        status, x, e = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
+        print("LP solution : ")
+        print(str(np.round(x, 2)))
+
+        print("Converting to integer")
+        print(N)
+        print(M)
+        print(K)
+        print(c)
+        print(p)
+        print(d)
+        print(b)
+        print(env)
+        print(Cmax)
+        print(Tmax)
+
+        x_a, e_a = to_integer_solution(x, M, N, K, c, p, d, b, env)
+
+        print("Integerized solution : ")
+        print(x_a)
+
+    def convertBatsimData(self, dict_jobs, list_machines_available):
+        print(" --------------- convertBatsimData ---------------------------  ")
+        list_of_functions_execution_time = []
+        list_of_functions_cost = []
+
+        list_of_containers_execution_time = []
+        list_of_containers_cost = []
+
+        machine_id = 0
+        container_id = 0
+
+        for machine in list_machines_available:
+            function_execution_time_on_machine = []
+            functions_cost_on_machine = []
+            container_execution_time_on_machine = []
+            containers_cost_on_machine = []
+            self.mapping_machine_id[machine_id] = machine
+            
+            job_id = 0
+            
+            mapping_container_job = []
+            for job in dict_jobs:
+                self.mapping_job_id[job_id] = job.id
+
+                function_execution_time = int(job.profile_dict['delay'])
+                function_execution_time_on_machine.append(function_execution_time)
+
+                function_cost = int(job.profile_dict['bw'])
+                functions_cost_on_machine.append(function_cost)
+
+                job_container = job.profile_dict['container']['image'] + '_' + job.profile_dict['container']['tag']
+                container_execution_time = int(self.container_description["profiles"][job_container]['delay'])
+                container_execution_time_on_machine.append(container_execution_time)
+
+                container_cost = int(self.container_description["profiles"][job_container]['bw'])
+                containers_cost_on_machine.append(container_cost)
+
+                if(self.mapping_container_id.get(job_container) == None):
+                    self.mapping_container_id[job_container] = container_id
+                    container_id += 1
+                self.mapping_job_container_approx_algo[job.id] = job_container
+
+                job_id += 1
+
+            list_of_functions_execution_time.append(function_execution_time_on_machine)
+            list_of_functions_cost.append(functions_cost_on_machine)
+            list_of_containers_execution_time.append(container_execution_time_on_machine)
+            list_of_containers_cost.append(containers_cost_on_machine)
+
+            machine_id += 1
+
+        list_of_containers = []
+        for job in dict_jobs:
+            job_container = job.profile_dict['container']['image'] + '_' + job.profile_dict['container']['tag']
+            job_container_in_mapping_id = self.mapping_container_id.get(job_container)
+            list_of_containers.append(job_container_in_mapping_id)
+
+        print(list_of_containers)
+        
+        print("List of list_of_functions_execution_time", list_of_functions_execution_time)
+        print("List of list_of_functions_cost", list_of_functions_cost)
+        print("List of list_of_containers_execution_time", list_of_containers_execution_time)
+        print("List of list_of_containers_cost", list_of_containers_cost)
+        print("List of list_of_containers_jobs", list_of_containers)
+
+        print("mapping_machine_id ", self.mapping_machine_id)
+        print("mapping_job_id ", self.mapping_job_id)
+        print("mapping_container_id ", self.mapping_container_id)
+        print("mapping_container_job ", self.mapping_container_job)
+        print("mapping_container_id ", self.mapping_container_id)
+        print("Ids: ", job_id, machine_id, container_id)
+        print(" ------------------------------------------  ")
+
+        return job_id, machine_id, container_id,  list_of_functions_execution_time, list_of_functions_cost, list_of_containers_execution_time, list_of_containers_cost, list_of_containers
+
+    """
+    def verifyConstraintsLPAlgo(self, Cmax, Tmax, M, N, K, c, p, d, b, env):
+        sum_cx = 0
+        for line in range(0, len(c)):
+            for column in range(0, len(c[line])):
+                sum_cx += c[line][column] + x[line][column]
+        print("sum_cx", sum_cx)
+    """
+
+    def callsLPAlgo(self, dict_jobs, list_machines_available):
+        print(" ------------------------- callsLPAlgo -------------------- ")
+        N, M, K, p, c, b, d, env = self.convertBatsimData(dict_jobs, list_machines_available)
+        print("Converting to integer")
+        print("p:", p)
+        print("c:",c)
+        print("b:",b)
+        print("d:",d)
+        print("env:",env)
+        print("N", N)
+        print("M", M)
+        print("K", K)
+        #env =  [0, 0, 0, 0, 0, 0, 0]
+        #print("env:",env)
+        #N = 7
+        #M = 3
+        #K = 3
+        Cmax = 12
+        Tmax = 4
+        
+        #self.verifyConstraintsLPAlgo(Cmax, Tmax, M, N, K, c, p, d, b, env)
+        
+        status, x, e = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
+        print("LP solution : ", status)
+        print("Solution e: ", e)
+        print("X: ", str(np.round(x, 2)))
+
+        print("Converting to integer")
+        print("N:", N)
+        print("M:",M)
+        print("K:",K)
+        print("c:",c)
+        print("p:",p)
+        print("d:",d)
+        print("b:",b)
+        print("env:",env)
+        print("Cmax:",Cmax)
+        print("Tmax:",Tmax)
+        x_a, e_a = to_integer_solution(x, M, N, K, c, p, d, b, env)
+
+        print("Integerized solution : ")
+        print(x_a)
+        print(" ------------------------------------------  ")
+
+        return x_a
+
+    def convertLPSolutionToBatsimFormat(self, lp_solution):
+        print("The solution is: ", lp_solution)
+
+        allocation_dict = {}
+        for machine_id in range(0, len(lp_solution)):
+            for job_id in range(0, len(lp_solution[machine_id])):
+                if (lp_solution[machine_id][job_id] == 1):
+                    machine = self.mapping_machine_id[machine_id]
+                    job = self.mapping_job_id[job_id]
+                    if(allocation_dict.get(machine) == None):
+                        allocation_dict[machine] = [job]
+                    else:
+                        allocation_dict[machine].append(job)
+
+        print("The allocation dict is: ", allocation_dict)
+        return allocation_dict
+
+# ----------------------------- ApproxAlgo -----------------------------------------
+
     def downloading_container_as_job(self, job):
         """
         Check if the job is a dynamic job representing a container being downloaded.
@@ -144,193 +354,6 @@ class ApproxAlgo(BatsimScheduler):
                 selected_job = job
         return selected_job
 
-    def callsLPAlgo_example(self):
-        print("Here")
-        N = 7
-        M = 3
-        K = 1
-
-        c =    [[3, 1, 1, 1, 1, 1, 1],
-                [3, 1, 1, 1, 1, 1, 1],
-                [3, 1, 1, 1, 1, 1, 1]]
-
-        p =    [[3, 1, 1, 1, 1, 1, 1],
-                [3, 1, 1, 1, 1, 1, 1],
-                [3, 1, 1, 1, 1, 1, 1]]
-
-        d =    [[0, 0],
-                [0, 0],
-                [0, 0]]
-
-        b =    [[0, 0],
-                [0, 0],
-                [0, 0]]
-
-        env =  [0, 0, 0, 0, 0, 0, 0]
-
-        Cmax = 9
-        Tmax = 3
-
-        print(type(c), type(Cmax))
-
-        status, x, e = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
-        print("LP solution : ")
-        print(str(np.round(x, 2)))
-
-        print("Converting to integer")
-        print(N)
-        print(M)
-        print(K)
-        print(c)
-        print(p)
-        print(d)
-        print(b)
-        print(env)
-        print(Cmax)
-        print(Tmax)
-
-        x_a, e_a = to_integer_solution(x, M, N, K, c, p, d, b, env)
-
-        print("Integerized solution : ")
-        print(x_a)
-
-    def convertBatsimData(self, dict_jobs, list_machines_available):
-        print(" --------------- convertBatsimData ---------------------------  ")
-        list_of_functions_execution_time = []
-        list_of_functions_cost = []
-
-        list_of_containers_execution_time = []
-        list_of_containers_cost = []
-
-        machine_id = 0
-        container_id = 0
-
-        for machine in list_machines_available:
-            function_execution_time_on_machine = []
-            functions_cost_on_machine = []
-            container_execution_time_on_machine = []
-            containers_cost_on_machine = []
-            self.mapping_machine_id[machine_id] = machine
-            
-            job_id = 0
-            
-            mapping_container_job = []
-            for job in dict_jobs:
-                self.mapping_job_id[job_id] = job.id
-
-                function_execution_time = int(job.profile_dict['delay'])
-                function_execution_time_on_machine.append(function_execution_time)
-
-                function_cost = int(job.profile_dict['bw'])
-                functions_cost_on_machine.append(function_cost)
-
-                job_container = job.profile_dict['container']['image'] + '_' + job.profile_dict['container']['tag']
-                container_execution_time = int(self.container_description["profiles"][job_container]['delay'])
-                container_execution_time_on_machine.append(container_execution_time)
-
-                container_cost = int(self.container_description["profiles"][job_container]['bw'])
-                containers_cost_on_machine.append(container_cost)
-
-                if(self.mapping_container_id.get(job_container) == None):
-                    self.mapping_container_id[container_id + len(self.mapping_container_id)] = job_container
-                self.mapping_job_container_approx_algo[job.id] = job_container
-
-                job_id += 1
-
-            list_of_functions_execution_time.append(function_execution_time_on_machine)
-            list_of_functions_cost.append(functions_cost_on_machine)
-            list_of_containers_execution_time.append(container_execution_time_on_machine)
-            list_of_containers_cost.append(containers_cost_on_machine)
-
-            machine_id += 1
-
-        job_id = 0
-        list_of_containers = []
-        for job in dict_jobs:
-            job_container = job.profile_dict['container']['image'] + '_' + job.profile_dict['container']['tag']
-            job_container_in_mapping_id = self.mapping_container_id.get(job_container)
-            list_of_containers.append(job_container_in_mapping_id)
-
-        print(list_of_containers)
-        
-        print("List of list_of_functions_execution_time", list_of_functions_execution_time)
-        print("List of list_of_functions_cost", list_of_functions_cost)
-        print("List of list_of_containers_execution_time", list_of_containers_execution_time)
-        print("List of list_of_containers_cost", list_of_containers_cost)
-        print("List of list_of_containers_jobs", list_of_containers)
-
-        print("mapping_machine_id ", self.mapping_machine_id)
-        print("mapping_job_id ", self.mapping_job_id)
-        print("mapping_container_id ", self.mapping_container_id)
-        print("mapping_container_job ", self.mapping_container_job)
-        print("mapping_container_id ", self.mapping_container_id)
-        print(" ------------------------------------------  ")
-
-        return list_of_functions_execution_time, list_of_functions_cost, list_of_containers_execution_time, list_of_containers_cost, list_of_containers
-
-    """
-    def verifyConstraintsLPAlgo(self, Cmax, Tmax, M, N, K, c, p, d, b, env):
-        sum_cx = 0
-        for line in range(0, len(c)):
-            for column in range(0, len(c[line])):
-                sum_cx += c[line][column] + x[line][column]
-        print("sum_cx", sum_cx)
-    """
-
-    def callsLPAlgo(self, dict_jobs, list_machines_available):
-        print(" ------------------------- callsLPAlgo -------------------- ")
-        p, c, b, d, env = self.convertBatsimData(dict_jobs, list_machines_available)
-        print("p,c,b,d, env: ", p, c, b, d, env)
-        env =  [0, 0, 0, 0, 0, 0, 0]
-        N = 7
-        M = 3
-        K = 1
-        Cmax = 9
-        Tmax = 3
-        
-        #self.verifyConstraintsLPAlgo(Cmax, Tmax, M, N, K, c, p, d, b, env)
-        
-        status, x, e = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
-        print("LP solution : ", status)
-        print("Solution e: ", e)
-        print(str(np.round(x, 2)))
-
-        print("Converting to integer")
-        print(N)
-        print(M)
-        print(K)
-        print(c)
-        print(p)
-        print(d)
-        print(b)
-        print(env)
-        print(Cmax)
-        print(Tmax)
-        x_a, e_a = to_integer_solution(x, M, N, K, c, p, d, b, env)
-
-        print("Integerized solution : ")
-        print(x_a)
-        print(" ------------------------------------------  ")
-
-        return x_a
-
-    def convertLPSolutionToBatsimFormat(self, lp_solution):
-        print("The solution is: ", lp_solution)
-
-        allocation_dict = {}
-        for machine_id in range(0, len(lp_solution)):
-            for job_id in range(0, len(lp_solution[machine_id])):
-                if (lp_solution[machine_id][job_id] == 1):
-                    machine = self.mapping_machine_id[machine_id]
-                    job = self.mapping_job_id[job_id]
-                    if(allocation_dict.get(machine) == None):
-                        allocation_dict[machine] = [job]
-                    else:
-                        allocation_dict[machine].append(job)
-
-        print("The allocation dict is: ", allocation_dict)
-        return allocation_dict
-
     def onSimulationBegins(self):
         """
         Verify if the correct flags has been set when the simulation begins
@@ -339,8 +362,8 @@ class ApproxAlgo(BatsimScheduler):
         assert self.bs.dynamic_job_registration_enabled, "Registration of dynamic jobs must be enabled for this scheduler to work"
         assert self.bs.ack_of_dynamic_jobs == False, "Acknowledgment of dynamic jobs must be disabled for this scheduler to work"
         
-        #self.bs.register_profiles("w0", self.container_description["profiles"])
-        #print("Created new profiles containers at onSimulationBegins: ", self.container_description)
+        self.bs.register_profiles("w0", self.container_description["profiles"])
+        print("Created new profiles containers at onSimulationBegins: ", self.container_description)
 
         #print("Calling LP Algo")
         #self.callsLPAlgo_example()
@@ -360,7 +383,6 @@ class ApproxAlgo(BatsimScheduler):
         """
         Update Batsim time with some small delay before new events happen.
         """
-        print("Before events")
         if self.bs.time() >= self.time_next_update:
             self.time_next_update = math.floor(self.bs.time()) + self.update_period
 
@@ -369,218 +391,123 @@ class ApproxAlgo(BatsimScheduler):
         The decion process. It will check if the machines have containers required by the jobs.
         If not, dybamic jobs will be created, and these jobs will represent the downloading of containers.
         """
-        print("Scheduling: ", self.openJobs)
-        scheduledJobs = []
-        #self.convertOpenJobsToCostMatrix(self.openJobs, self.availableResources)
-        
-        # Get the allocation decisions
-        approx_algo_allocation = None 
-        allocation_decisions = None
-        if(len(self.openJobs) == 7):
-            print("Time to call LP")
-            lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
-            approx_algo_allocation = self.convertLPSolutionToBatsimFormat(lp_solution)
-            print("approx_algo_allocation", approx_algo_allocation)
-        if (approx_algo_allocation != None):
-            allocation_decisions = approx_algo_allocation.copy()
 
-            for machine in allocation_decisions:
-                # Get machine and job_id
-                print("machine", machine)
-                for job_id in allocation_decisions[machine]:
+        scheduledJobs = []
+        while(len(self.openJobs) > 0):
+            # Get the allocation decisions
+            approx_algo_allocation = None
+            allocation_decisions = None
+            if(len(self.openJobs) == 7):
+                print("Time to call LP")
+                lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
+                approx_algo_allocation = self.convertLPSolutionToBatsimFormat(lp_solution)
+            
+            if (approx_algo_allocation == None):
+                break
+
+            # Since we have the allocation of a set of tasks, per machine, lets allocate the possible ones, 
+            # and put the rest in a waiting list.
+
+            # Lets do it per machine
+            for machine_id in approx_algo_allocation:
+                # per job
+                while(len(approx_algo_allocation[machine_id]) > 0):
+                    job_id = approx_algo_allocation[machine_id].pop(0)
+
                     job = None
                     for open_job in self.openJobs:
                         if open_job.id == job_id:
                             job = open_job
                             break
 
-                    # Or the job is no on OpenJobs anymore, or it is a container that need to be downloaded
-                    if job != None:
-                        # TODO To implement here the dynamic jobs
-                        #if (is_container())
-                        job.allocation = ProcSet(machine,machine)
-                        self.mapping_jobs_waiting_machines[int(str(machine))].append(job)
-            print("Machines waiting", self.mapping_jobs_waiting_machines)
-
-        while(approx_algo_allocation != None and len(self.openJobs) > 0):
-            for machine in self.availableResources:
-                jobs_for_machine = self.mapping_jobs_waiting_machines[machine]
-                print("jobs_for_machine", jobs_for_machine)
-                if (len(jobs_for_machine) > 0):
-                    job = jobs_for_machine.pop(0)
-                    print("Selected machine", machine)
-                    print("Selected job", job)
-                    self.global_scheduledJobs.append(job)
-
-                    # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
-                    machine = ProcSet((machine,machine))
-                    job.allocation = machine
-                    scheduledJobs.append(job)
-
-                    self.nb_jobs += 1
-    
-                    self.availableResources -= machine
-                    self.openJobs.remove(job)
-            
-            # If all jobs were processed, break the loop to avoid iterating in the first loop for nothing
-            if(len(self.availableResources) == 0):
-                break
-                
-        print("Here!!")
-
-        # Update time
-        self.bs.consume_time(self.sched_delay)
-
-        # Send the scheduled jobs to Batsim
-        if len(scheduledJobs) > 0:
-            print("Sent to schedule", scheduledJobs)
-            self.bs.execute_jobs(scheduledJobs)
-
-        """
-        # Submitt one job per machine
-        while(approx_algo_allocation != None and len(self.openJobs) > 0):
-            for machine in allocation_decisions:
-                # Check if the machine is available. It will be not if it is still executing the last allocated job
-                print("Available", self.availableResources)
-                print(machine in self.availableResources)
-                if machine not in self.availableResources:
-                    break
-
-                # Get machine and job_id
-                print("machine", machine)
-                if (len(allocation_decisions[machine]) > 0):
-                    job_id = allocation_decisions[machine].pop(0)
-                print("job", job_id)
-
-                # Retrieve the full job description in OpenJobs
-                job = None
-                for open_job in self.openJobs:
-                    if open_job.id == job_id:
-                        job = open_job
+                    # The job is not in OpenJobs anymore, so it should be removed from approx_algo_allocation[machine_id]
+                    if job == None:
+                        #approx_algo_allocation[machine_id].pop(job_id)
                         break
 
-                # If we found the job succesfully, we submitt it
-                if job != None:
-                    print("Selected job", job)
+                    job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
+                    download_time_reduction = 0
+
+                    machine = ProcSet((machine_id,machine_id)) # Convert the machine id to a ProcSet
+                    # If the container is not on the machine, download it there, before scheduling the job
+                    if (job_container != None and 
+                        job_container not in self.mapping_machine_container[int(str(machine))]):
+                        """
+                        new_profile_name = job_container
+
+                        # If there are usefull layers in the allocated machine, create a new profile for such job, with a new delay
+                        if (download_time_reduction != 0):
+                            new_profile_name = job_container + '_reduced_' + str(round(download_time_reduction, 2))
+                            new_profile = {}
+                            if new_profile_name not in self.container_description["profiles"].keys():
+                                new_profile[new_profile_name] = self.container_description["profiles"].get(job_container)
+                                new_delay = round(float(new_profile[new_profile_name]["delay"]) * download_time_reduction, 2)
+                                new_profile[new_profile_name]["delay"] -= new_delay
+                                self.container_description["profiles"][new_profile_name] = new_profile
+                                self.bs.register_profiles("w0", new_profile)
+                        """
+                        # Create a dynamic job
+                        new_job = self.bs.register_job(
+                                job.workload + '!' + job_container + "_job" + str(job.id.split("!")[1]) + "_" + str(self.nb_container_downloaded),
+                                1, 
+                                2000,
+                                job_container, 
+                                subtime=None)
                     
-                    self.global_scheduledJobs.append(job)
+                        self.container_jobs_scheduled.append(new_job)
+                        
+                        # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
+                        new_job.allocation = machine
 
-                    # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
-                    machine = ProcSet((machine,machine))
-                    job.allocation = machine
-                    scheduledJobs.append(job)
+                        # Check if the machine is available, if not, put in a waiting list
+                        if(machine.issubset(self.availableResources) == True):
+                            # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
+                            scheduledJobs.append(new_job)
+                            self.nb_jobs += 2
+                            self.nb_container_downloaded += 1
+                            self.availableResources -= machine
 
-                    self.nb_jobs += 1
-    
-                    self.availableResources -= machine
+                        else:
+                            self.mapping_jobs_waiting_machines[int(str(machine))].append(new_job)
+
+                        # Save where job should be executed, and what is the container it depends on
+                        job.allocation = machine
+                        self.mapping_job_container[job.id] = [job, new_job.id]
+                
+                    # Or the container is already in the machine, or the job does not require a container, 
+                    # so the job can be scheduled
+                    else:
+                        job.allocation = machine
+                        if(machine.issubset(self.availableResources) == False) :
+                            self.mapping_jobs_waiting_machines[int(str(machine))].append(job)
+                        else:
+                            scheduledJobs.append(job)
+                            self.availableResources -= machine
+
+                        # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
+                        self.nb_jobs += 1
+
                     self.openJobs.remove(job)
+                self.availableResources -= machine
 
             # If all jobs were processed, break the loop to avoid iterating in the first loop for nothing
-            if(len(self.availableResources) == 0):
-                break
-                
-        print("Here!!")
+            #if(len(self.availableResources) == 0):
+            #    break
 
         # Update time
         self.bs.consume_time(self.sched_delay)
 
         # Send the scheduled jobs to Batsim
         if len(scheduledJobs) > 0:
-            print("Sent to schedule", scheduledJobs)
-            self.bs.execute_jobs(scheduledJobs)
-        """
-        """
-        while(len(self.openJobs) > 0):
-            job = self.get_earliest_submitted_job()
-            job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
+            self.bs.execute_jobs(scheduledJobs)     
 
-            # Search the best machine available, which means, one with the required container
-            download_time_reduction = 0
-            machine_candidates, scores_machine_container = self.list_machines_with_container(job_container)
-            if (len(machine_candidates) != 0):
-                machine = machine_candidates[0]
-                download_time_reduction = scores_machine_container[machine]
-                machine = ProcSet((machine,machine)) # Convert the machine id to a ProcSet
-            else:
-                if(len(self.availableResources) != 0):
-                    machine = ProcSet(*islice(self.availableResources, 1))
-                else:
-                    break
-
-            # If the container is not on the machine, download it there, before scheduling the job
-            if (job_container != None and 
-                job_container not in self.mapping_machine_container[int(str(machine))]):
-                
-                new_profile_name = job_container
-                
-                # If there are usefull layers in the allocated machine, create a new profile for such job, with a new delay
-                if (download_time_reduction != 0):
-                    new_profile_name = job_container + '_reduced_' + str(round(download_time_reduction, 2))
-                    new_profile = {}
-                    if new_profile_name not in self.container_description["profiles"].keys():
-                        new_profile[new_profile_name] = self.container_description["profiles"].get(job_container)
-                        new_delay = round(float(new_profile[new_profile_name]["delay"]) * download_time_reduction, 2)
-                        new_profile[new_profile_name]["delay"] -= new_delay
-                        self.container_description["profiles"][new_profile_name] = new_profile
-                        self.bs.register_profiles("w0", new_profile)
-
-                # Create a dynamic job
-                new_job = self.bs.register_job(
-                    job.workload + '!' + job_container + "_job" + str(job.id.split("!")[1]) + "_" + str(self.nb_container_downloaded),
-                    1, 
-                    2000,
-                    new_profile_name, 
-                    subtime=None)
-                
-                self.container_jobs_scheduled.append(new_job)
-
-                # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
-                new_job.allocation = machine
-                scheduledJobs.append(new_job)
-
-                # Save where job should be executed, and what is the container it depends on
-                job.allocation = machine
-                self.mapping_job_container[job.id] = [job, new_job.id]
-                
-
-                self.nb_jobs += 2
-                self.nb_container_downloaded += 1
-            
-            # Or the container is already in the machine, or the job does not require a container, 
-            # so the job can be scheduled
-            else:
-                self.global_scheduledJobs.append(job)
-
-                # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
-                job.allocation = machine
-                scheduledJobs.append(job)
-
-                self.nb_jobs += 1
-  
-            self.availableResources -= machine
-            self.openJobs.remove(job)
-
-            # If all jobs were processed, break the loop to avoid iterating in the first loop for nothing
-            if(len(self.availableResources) == 0):
-                break
-
-        # Update time
-        self.bs.consume_time(self.sched_delay)
-
-        # Send the scheduled jobs to Batsim
-        if len(scheduledJobs) > 0:
-            self.bs.execute_jobs(scheduledJobs)            
-
-        """
     def onJobSubmission(self, job):
-        print("Submitted", job)
         if (self.downloading_container_as_job(job) == None):
             self.openJobs.add(job)
         self.scheduleJobs()
     
 
     def onJobCompletion(self, job):
-        print("Job completion", job)
         self.nb_completed_jobs += 1
         self.jobs_completed.append(job)
         machine_id = int(str(job.allocation))
@@ -592,9 +519,8 @@ class ApproxAlgo(BatsimScheduler):
             
             # Add the container in the machine
             # for availableResource in self.availableResources:
-            machine = int(str(job.allocation))
-            if(container_name not in self.mapping_machine_container[machine]):
-                self.mapping_machine_container[machine].append(container_name)
+            if(container_name not in self.mapping_machine_container[machine_id]):
+                self.mapping_machine_container[machine_id].append(container_name)
             
             # Iterate over the mapping_job_container to find the job related to this dynamic job
             job_related_to_dynamic_job = None
@@ -618,17 +544,14 @@ class ApproxAlgo(BatsimScheduler):
                 self.availableResources = job.allocation
             else:
                 self.availableResources |= job.allocation
-            
+
             # Iterate over the mapping_jobs_waiting_machines to search jobs waiting for this machine
             if (len(self.mapping_jobs_waiting_machines[machine_id]) != 0):
-                print("There are jobs waiting for this machine: ", self.mapping_jobs_waiting_machines[machine_id])
                 scheduledJobs = [self.mapping_jobs_waiting_machines[machine_id].pop(0)]
                 self.availableResources -= job.allocation
                 self.bs.execute_jobs(scheduledJobs)
-                self.openJobs.remove(scheduledJobs[0])
 
         # Check if the simulation is finished
-        print("Verifying to finish", self.openJobs, self.jobs_completed, self.bs.nb_jobs_submitted)
         if(len(self.openJobs) == 0 and len(self.jobs_completed) == self.bs.nb_jobs_submitted):
             self.bs.notify_registration_finished()
             self.notify_already_sent = True
