@@ -5,11 +5,8 @@
 
 let
   self = rec {
-    pybatsim = kapack.pkgs.python3Packages.buildPythonPackage rec {
-      pname = "pybatsim";
-      version = "local";
-      format = "pyproject";
-
+    pybatsim = kapack.pybatsim.overrideAttrs (attrs: rec {
+      name = "${kapack.pybatsim.name}-local";
       src = kapack.pkgs.lib.sourceByRegex ./. [
         "^pyproject\.toml"
         "^poetry\.lock"
@@ -33,31 +30,7 @@ let
         "^schedulers/unMaintained"
         "^schedulers/unMaintained/.*\.py"
       ];
-
-      buildInputs = with kapack.pkgs.python3Packages; [
-        poetry
-      ];
-      propagatedBuildInputs = with kapack.pkgs.python3Packages; [
-        sortedcontainers
-        pyzmq
-        redis
-        click
-        docopt
-        kapack.procset
-      ];
-
-      doCheck = false;
-
-      meta = with kapack.pkgs.lib; {
-        description = "Python API and schedulers for Batsim";
-        homepage = "https://gitlab.inria.fr/batsim/pybatsim";
-        platforms = platforms.all;
-        license = licenses.lgpl3;
-        broken = false;
-
-        longDescription = "PyBatsim is the Python API for Batsim.";
-      };
-    };
+    });
   };
 in
   self

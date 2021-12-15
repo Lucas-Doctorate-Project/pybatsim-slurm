@@ -54,3 +54,6 @@ docs/_build/
 # emacs and vim tmp files
 *~
 *.swp
+
+# Nix
+result*
