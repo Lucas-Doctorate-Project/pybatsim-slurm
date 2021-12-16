@@ -294,13 +294,13 @@ class ApproxAlgoWithLayers(BatsimScheduler):
 
     def get_scores_per_machine(self, machine_id, job_container):
         """
-        List machines that already have job_container
+        Getting scores of containers per machine
         """
-        print("computing the scores", machine_id, job_container)
+
         list_of_layers = self.get_layers_from_container(job_container)
         scores_machine_container = {}
         containers_in_machine = self.mapping_machine_container[machine_id]
-        print("containers_in_machine", containers_in_machine)
+
         if(len(containers_in_machine) == 0):
             return {}
         else:
@@ -398,7 +398,7 @@ class ApproxAlgoWithLayers(BatsimScheduler):
         """
         Update the set of Jobs and Resources after the simulation begins
         """
-        print("Inited")
+
         self.openJobs = set()
         self.availableResources = ProcSet((0,self.bs.nb_compute_resources-1))
         for availableResource in self.availableResources:
@@ -417,14 +417,13 @@ class ApproxAlgoWithLayers(BatsimScheduler):
         The decion process. It will check if the machines have containers required by the jobs.
         If not, dybamic jobs will be created, and these jobs will represent the downloading of containers.
         """
-        print("Scheduling jobs:", self.openJobs)
+
         scheduledJobs = []
         while(len(self.openJobs) > 0):
             # Get the allocation decisions
             approx_algo_allocation = None
             allocation_decisions = None
             if(len(self.openJobs) == 7):
-                print("Time to call LP")
                 lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
                 approx_algo_allocation = self.convertLPSolutionToBatsimFormat(lp_solution)
             
@@ -434,15 +433,11 @@ class ApproxAlgoWithLayers(BatsimScheduler):
             # Since we have the allocation of a set of tasks, per machine, lets allocate the possible ones, 
             # and put the rest in a waiting list.
 
-            print("lets allocate all decision to the machines")
             # Lets do it per machine
             for machine_id in approx_algo_allocation:
-                print("machine", machine_id)
-
                 # per job
                 while(len(approx_algo_allocation[machine_id]) > 0):
                     job_id = approx_algo_allocation[machine_id].pop(0)
-                    print("job: ", job_id)
                     job = None
                     for open_job in self.openJobs:
                         if open_job.id == job_id:
@@ -454,21 +449,11 @@ class ApproxAlgoWithLayers(BatsimScheduler):
                         #approx_algo_allocation[machine_id].pop(job_id)
                         break
 
-                    print("Scheduling job: ", job)
                     job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
-                    print("job_container", job_container)
                     download_time_reduction = 0
                     scores_machine_container = self.get_scores_per_machine(machine_id, job_container)     
-                    print("scores: ", scores_machine_container)
-                    print(scores_machine_container.keys())
                     if (machine_id in list(scores_machine_container.keys())):
-                        print("Entrou")
-                        #machine = machine_candidates[0]
                         download_time_reduction = scores_machine_container.get(machine_id)
-                        print("Download time", download_time_reduction)
-                        #machine = ProcSet((machine,machine)) # Convert the machine id to a ProcSet
-                    #else:
-                    #    break
                     
                     machine = ProcSet((machine_id,machine_id)) # Convert the machine id to a ProcSet
                     # If the container is not on the machine, download it there, before scheduling the job
@@ -493,7 +478,6 @@ class ApproxAlgoWithLayers(BatsimScheduler):
                             # If a new profile was created, update the new_job_profile
                             new_job_profile = new_profile_name
 
-                        print("Before creating dyn job we have: ", new_job_profile)
                         # Create a dynamic job
                         new_job = self.bs.register_job(
                                 job.workload + '!' + job_container + "_job" + str(job.id.split("!")[1]) + "_" + str(self.nb_container_downloaded),
@@ -538,10 +522,6 @@ class ApproxAlgoWithLayers(BatsimScheduler):
                     self.openJobs.remove(job)
                 self.availableResources -= machine
 
-            # If all jobs were processed, break the loop to avoid iterating in the first loop for nothing
-            #if(len(self.availableResources) == 0):
-            #    break
-
         # Update time
         self.bs.consume_time(self.sched_delay)
 
@@ -556,7 +536,6 @@ class ApproxAlgoWithLayers(BatsimScheduler):
     
 
     def onJobCompletion(self, job):
-        print("Completed job", job, type(job))
         self.nb_completed_jobs += 1
         self.jobs_completed.append(job)
         machine_id = int(str(job.allocation))
@@ -564,9 +543,7 @@ class ApproxAlgoWithLayers(BatsimScheduler):
         # If the completed job is a dynamic job (container), we will use the same machine to compute the original job
         # that required such dynamic job.
         container_name = self.downloading_container_as_job(job)
-        print("Container name", container_name)
         if (container_name != None):
-            
             # Add the container in the machine
             # for availableResource in self.availableResources:
             if(container_name not in self.mapping_machine_container[machine_id]):
@@ -580,7 +557,6 @@ class ApproxAlgoWithLayers(BatsimScheduler):
 
             # If some job is found, send it to be executed.
             if (job_related_to_dynamic_job != None):
-                print("Job related to the dyn: ", job_related_to_dynamic_job)
                 scheduledJobs = [job_related_to_dynamic_job]
                 self.bs.execute_jobs(scheduledJobs)
         
@@ -598,56 +574,31 @@ class ApproxAlgoWithLayers(BatsimScheduler):
 
             # Iterate over the mapping_jobs_waiting_machines to search jobs waiting for this machine
             if (len(self.mapping_jobs_waiting_machines[machine_id]) != 0):
-                #scheduledJobs = [self.mapping_jobs_waiting_machines[machine_id].pop(0)]
-
-                # --------------------------------------------------------
-
-                print(" ########### There are jobs waiting for this machine", self.mapping_jobs_waiting_machines[machine_id])
                 job = self.mapping_jobs_waiting_machines[machine_id].pop(0)
                 scheduledJobs = [job]
-                print("Until now, the job that will be executed is: ", scheduledJobs)
-                    #Check if it is an origianl job or dyn
-                if (job.profile_dict.get('container') == None):
-                    print("It is a dyn job, lets recompute its download time")
 
+                # Check if it is an origianl job or dyn
+                if (job.profile_dict.get('container') == None):
                     # Search for its original job
                     for job_mapped in self.mapping_job_container:
                         if self.mapping_job_container[job_mapped][1] == job.id:
                             original_job = self.mapping_job_container[job_mapped][0]
-                            print("Found original job", original_job)
                             break
 
-                    print("original job", original_job)
-                    print("job: ", job, type(job))
-                    print(job.profile_dict)
-
-                    #job_container = self.downloading_container_as_job(job) #job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
                     job_container = original_job.profile_dict['container']['image'] + "_"  + original_job.profile_dict['container']['tag']
-                    print("job_container", job_container)
-
                     download_time_reduction = 0
-                    machine_candidates, scores_machine_container = self.list_machines_with_container(job_container)       
-                    print("machines candidates: ", machine_candidates, scores_machine_container)
-                    print(scores_machine_container.keys())
-                    if (len(machine_candidates) != 0 and machine_id in list(scores_machine_container.keys())):
-                        print("Entrou")
-                        #machine = machine_candidates[0]
+                    scores_machine_container = self.get_scores_per_machine(machine_id, job_container)     
+                    if (machine_id in list(scores_machine_container.keys())):
                         download_time_reduction = scores_machine_container.get(machine_id)
-                        print("Download time", download_time_reduction)
-                        #machine = ProcSet((machine,machine)) # Convert the machine id to a ProcSet
-                    #else:
-                    #    break
-                    print("Na maquina tem: ", self.mapping_machine_container[machine_id])
+
                     machine = ProcSet((machine_id,machine_id)) # Convert the machine id to a ProcSet
                     
                     # If the container is not on the machine, download it there, creating a dyn job
                     if (job_container != None and 
                         job_container not in self.mapping_machine_container[int(str(machine))]):
 
+                        # If there are usefull layers in the allocated machine, create a new profile for such job, with a new delay
                         if (download_time_reduction != 0):
-                            print("Lets update it, creating a new profile and dyn job")
-                            
-                            # If there are usefull layers in the allocated machine, create a new profile for such job, with a new delay
                             new_profile_name = job_container + '_reduced_' + str(round(download_time_reduction, 2))
                             new_profile = {}
                             if new_profile_name not in self.container_description["profiles"].keys():
@@ -683,38 +634,14 @@ class ApproxAlgoWithLayers(BatsimScheduler):
                     # Or the container is already in the machine, or the job does not require a container
                     else:
                         self.nb_container_cancelled += 1
-                        #self.containers_canceled.append(job)
-                        #self.bs.kill_jobs([job])
-                        #self.bs.nb_jobs_rejected += 1
-                        #self.bs.nb_jobs_scheduled += 1
                         self.bs.reject_jobs([job])
-                        print("Container already in the machine")
                         scheduledJobs = [original_job]
 
-# -----------------------------------------------------------------------------------------------------
-                print("Chosen jobs: ", scheduledJobs)
                 self.availableResources -= job.allocation
                 self.bs.execute_jobs(scheduledJobs)
 
         # Check if the simulation is finished
-        print("Checking if it is over")
-        print(self.openJobs)
-        print(self.jobs_completed)
-        print(self.bs.nb_jobs_submitted, self.nb_container_cancelled)
-
-        print("Batsim stuff")
-        print(self.bs.nb_jobs_submitted)
-        print(self.bs.nb_jobs_killed)
-        print(self.bs.nb_jobs_rejected)
-        print(self.bs.nb_jobs_scheduled)
-        print(self.bs.nb_jobs_in_submission)
-        print(self.bs.nb_jobs_completed)
-        print(self.bs.nb_jobs_successful)
-        print(self.bs.nb_jobs_failed)
-        print(self.bs.nb_jobs_timeout)
-
         if(len(self.openJobs) == 0 and len(self.jobs_completed) == self.bs.nb_jobs_submitted - self.nb_container_cancelled):
-            print("Finished")
             self.bs.notify_registration_finished()
             self.notify_already_sent = True
 
