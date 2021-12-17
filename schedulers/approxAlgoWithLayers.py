@@ -62,6 +62,8 @@ class ApproxAlgoWithLayers(BatsimScheduler):
         self.container_jobs_executed = []
         self.original_jobs_scheduled = []
 
+        self.lp_algo_cmax = 9
+        self.lp_algo_tmax = 3
 
     # ----------------------------- ApproxAlgo -----------------------------------------
     def callsLPAlgo_example(self):
@@ -123,8 +125,11 @@ class ApproxAlgoWithLayers(BatsimScheduler):
         list_of_containers_execution_time = []
         list_of_containers_cost = []
 
+        mapping_container_id = {}
+
         machine_id = 0
         container_id = 0
+        job_id = 0 # Just in case there is no machines_available
 
         for machine in list_machines_available:
             function_execution_time_on_machine = []
@@ -132,7 +137,6 @@ class ApproxAlgoWithLayers(BatsimScheduler):
             container_execution_time_on_machine = []
             containers_cost_on_machine = []
             self.mapping_machine_id[machine_id] = machine
-            
             job_id = 0
             
             mapping_container_job = []
@@ -152,8 +156,9 @@ class ApproxAlgoWithLayers(BatsimScheduler):
                 container_cost = int(self.container_description["profiles"][job_container]['bw'])
                 containers_cost_on_machine.append(container_cost)
 
-                if(self.mapping_container_id.get(job_container) == None):
-                    self.mapping_container_id[job_container] = container_id
+
+                if(mapping_container_id.get(job_container) == None):
+                    mapping_container_id[job_container] = container_id
                     container_id += 1
                 self.mapping_job_container_approx_algo[job.id] = job_container
 
@@ -169,10 +174,8 @@ class ApproxAlgoWithLayers(BatsimScheduler):
         list_of_containers = []
         for job in dict_jobs:
             job_container = job.profile_dict['container']['image'] + '_' + job.profile_dict['container']['tag']
-            job_container_in_mapping_id = self.mapping_container_id.get(job_container)
+            job_container_in_mapping_id = mapping_container_id.get(job_container)
             list_of_containers.append(job_container_in_mapping_id)
-
-        print(list_of_containers)
         
         print("List of list_of_functions_execution_time", list_of_functions_execution_time)
         print("List of list_of_functions_cost", list_of_functions_cost)
@@ -202,7 +205,7 @@ class ApproxAlgoWithLayers(BatsimScheduler):
     def callsLPAlgo(self, dict_jobs, list_machines_available):
         print(" ------------------------- callsLPAlgo -------------------- ")
         N, M, K, p, c, b, d, env = self.convertBatsimData(dict_jobs, list_machines_available)
-        print("Converting to integer")
+        print("Prepare to search solution")
         print("p:", p)
         print("c:",c)
         print("b:",b)
@@ -211,12 +214,21 @@ class ApproxAlgoWithLayers(BatsimScheduler):
         print("N", N)
         print("M", M)
         print("K", K)
-        Cmax = 12
-        Tmax = 4
+        Cmax = self.lp_algo_cmax
+        Tmax = self.lp_algo_tmax
         
         #self.verifyConstraintsLPAlgo(Cmax, Tmax, M, N, K, c, p, d, b, env)
         
         status, x, e = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
+        print("LP solution : ", status)
+        print("Solution e: ", e)
+        print("X: ", str(np.round(x, 2)))
+
+        while (status != 0):
+            Cmax += 1
+            Tmax += 1
+            status, x, e = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
+
         print("LP solution : ", status)
         print("Solution e: ", e)
         print("X: ", str(np.round(x, 2)))
@@ -238,7 +250,7 @@ class ApproxAlgoWithLayers(BatsimScheduler):
         print(x_a)
         print(" ------------------------------------------  ")
 
-        return x_a
+        return status, x_a
 
     def convertLPSolutionToBatsimFormat(self, lp_solution):
         print("The solution is: ", lp_solution)
@@ -419,23 +431,18 @@ class ApproxAlgoWithLayers(BatsimScheduler):
         """
 
         scheduledJobs = []
-        while(len(self.openJobs) > 0):
+        while(len(self.openJobs) > 0 and len(self.availableResources) > 0):
             # Get the allocation decisions
-            approx_algo_allocation = None
-            allocation_decisions = None
-            if(len(self.openJobs) == 7):
-                lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
-                approx_algo_allocation = self.convertLPSolutionToBatsimFormat(lp_solution)
-            
-            if (approx_algo_allocation == None):
+            solution_status, lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
+            if (solution_status != 0):
                 break
+            approx_algo_allocation = self.convertLPSolutionToBatsimFormat(lp_solution)
 
             # Since we have the allocation of a set of tasks, per machine, lets allocate the possible ones, 
             # and put the rest in a waiting list.
-
             # Lets do it per machine
             for machine_id in approx_algo_allocation:
-                # per job
+                # Per job
                 while(len(approx_algo_allocation[machine_id]) > 0):
                     job_id = approx_algo_allocation[machine_id].pop(0)
                     job = None
