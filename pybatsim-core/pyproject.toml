@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pybatsim"
-version = "3.2.1"
+version = "4.0.0-alpha.0"
 description = "Python API and schedulers for Batsim"
 readme = "README.rst"
 keywords = [
@@ -31,8 +31,7 @@ classifiers = [
   "Topic :: System :: Distributed Computing",
 ]
 packages = [
-  {include = "batsim"},
-  {include = "schedulers"},
+  {include = "pybatsim", from = "src"},
 ]
 
 [tool.poetry.dependencies]
@@ -52,8 +51,8 @@ Sphinx = "^4.3.1"
 tools = ["pandas"]
 
 [tool.poetry.scripts]
-pybatsim = "batsim.cmds.launcher:main"
-pybatsim-experiment = "batsim.cmds.experiments:main"
+pybatsim = "pybatsim.batsim.cmds.launcher:main"
+pybatsim-experiment = "pybatsim.batsim.cmds.experiments:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
