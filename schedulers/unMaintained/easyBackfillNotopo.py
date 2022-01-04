@@ -1,7 +1,8 @@
 from batsim.batsim import BatsimScheduler
-from schedulers.common_pyss_adaptator import CpuSnapshot
 from sortedcontainers import SortedSet
 from procset import ProcSet
+
+from common_pyss_adaptator import CpuSnapshot
 
 class EasyBackfillNotopo(BatsimScheduler):
     """
