@@ -23,8 +23,9 @@ import math
 import random
 from itertools import islice
 
-from batsim.batsim import BatsimScheduler, Job
 from procset import ProcInt, ProcSet
+
+from batsim.batsim import BatsimScheduler, Job
 
 
 def sort_by_id(jobs):

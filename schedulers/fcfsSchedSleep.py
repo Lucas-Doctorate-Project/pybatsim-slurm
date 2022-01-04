@@ -15,12 +15,13 @@ Let us assume all machines have the following pstates (corresponding to file
 energy_platform_homogeneous.xml)
 """
 
-from batsim.batsim import BatsimScheduler
-
 import sys
-from sortedcontainers import SortedSet
 from enum import Enum
+
 from procset import ProcSet
+from sortedcontainers import SortedSet
+
+from batsim.batsim import BatsimScheduler
 
 
 class PState(Enum):

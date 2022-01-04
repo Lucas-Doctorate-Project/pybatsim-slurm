@@ -1,7 +1,9 @@
+from random import sample
+
+from procset import ProcSet
+
 from batsim.batsim import BatsimScheduler
 
-from random import sample
-from procset import ProcSet
 
 class RandomSched(BatsimScheduler):
 

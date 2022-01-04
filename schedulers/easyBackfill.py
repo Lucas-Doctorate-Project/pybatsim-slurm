@@ -3,10 +3,10 @@ An Easy Backfill scheduler that care a little about topology.
 This scheduler consider job as rectangle.
 """
 
-from batsim.batsim import BatsimScheduler
-
-from sortedcontainers import SortedListWithKey
 from procset import ProcSet
+from sortedcontainers import SortedListWithKey
+
+from batsim.batsim import BatsimScheduler
 
 
 INFINITY = float('inf')

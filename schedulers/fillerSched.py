@@ -1,9 +1,8 @@
-from batsim.batsim import BatsimScheduler, Batsim
-
-import sys
-import os
-from procset import ProcSet
 from itertools import islice
+
+from procset import ProcSet
+
+from batsim.batsim import BatsimScheduler
 
 
 class FillerSched(BatsimScheduler):

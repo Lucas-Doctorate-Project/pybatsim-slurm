@@ -1,10 +1,8 @@
-from batsim.batsim import BatsimScheduler, Batsim, Job
-
-import sys
-import os
-import logging
-from procset import ProcSet
 from itertools import islice
+
+from procset import ProcSet
+
+from batsim.batsim import BatsimScheduler
 
 
 class FillerSchedWithEvents(BatsimScheduler):
