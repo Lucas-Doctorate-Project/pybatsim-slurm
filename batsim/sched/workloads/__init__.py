@@ -6,10 +6,4 @@
 
 """
 
-from .workloads import *
-
-__all__ = [
-    "JobDescription",
-    "WorkloadDescription",
-    "generate_workload",
-]
+from .workloads import JobDescription, WorkloadDescription, generate_workload
