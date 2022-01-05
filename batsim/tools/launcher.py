@@ -14,7 +14,6 @@ import importlib.util
 import os.path
 
 from batsim.batsim import Batsim, BatsimScheduler, NetworkHandler
-from batsim.validatingmachine import ValidatingMachine
 
 from docopt import docopt
 import zmq
@@ -103,13 +102,7 @@ def launch_scheduler(scheduler,
                      socket_endpoint,
                      event_socket_endpoint,
                      options,
-                     timeout,
-                     protect):
-
-    if protect:
-        vm = ValidatingMachine
-    else:
-        vm = None
+                     timeout):
 
     print("Scheduler: {} ({})".format(scheduler.__class__.__name__, options))
     time_start = time.time()
@@ -118,8 +111,7 @@ def launch_scheduler(scheduler,
     bs = Batsim(scheduler,
                 socket_endpoint,
                 timeout,
-                event_socket_endpoint,
-                validatingmachine=vm)
+                event_socket_endpoint)
     aborted = False
     # try:
     bs.start()
@@ -154,9 +146,7 @@ def launch_scheduler_main(
         standalone=True,
         **kwargs):
     for arg in argv or sys.argv[1:]:
-        if arg == "--protect":
-            kwargs["protect"] = True
-        elif arg == "--verbose":
+        if arg == "--verbose":
             kwargs["verbose"] = 999
         elif arg.startswith("--options="):
             kwargs["options"] = json.loads(arg[arg.index("=") + 1:])

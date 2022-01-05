@@ -45,7 +45,6 @@
         "name":"fillerSched",
         "_comment": "The name of a standard scheduler or the path to a python module containing a scheduler",
 
-        "verbose": true,
-        "protection": true
+        "verbose": true
     }
 }

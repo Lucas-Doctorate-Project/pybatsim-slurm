@@ -23,8 +23,7 @@ class Batsim(object):
     def __init__(self, scheduler,
                  network_endpoint,
                  timeout,
-                 event_endpoint=None,
-                 validatingmachine=None):
+                 event_endpoint=None):
 
 
         self.logger = logging.getLogger(__name__)
@@ -43,10 +42,7 @@ class Batsim(object):
 
         sys.setrecursionlimit(10000)
 
-        if validatingmachine is None:
-            self.scheduler = scheduler
-        else:
-            self.scheduler = validatingmachine(scheduler)
+        self.scheduler = scheduler
 
         # initialize some public attributes
         self.nb_jobs_submitted_from_batsim = 0

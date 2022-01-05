@@ -10,7 +10,6 @@ Options:
     -v --verbosity=<verbosity-level>        Sets the verbosity level. Available
                                             values are {debug, info, warning, error, critical}
                                             Default: info
-    -p --protect                            Protect the scheduler using a validating machine.
     -s --socket-endpoint=<endpoint>         Batsim socket endpoint to use [default: tcp://*:28000]
     -e --event-socket-endpoint=<endpoint>   Socket endpoint to use to publish scheduler events
     -o --options=<options_string>           A Json string to pass to the scheduler [default: {}]
@@ -41,8 +40,6 @@ def main():
 
     timeout = int(arguments['--timeout'] or float("inf"))
 
-    protect = bool(arguments['--protect'])
-
     if arguments["--options-file"]:
         with open(arguments["--options-file"]) as options_file:
             options = json.load(options_file)
@@ -61,8 +58,7 @@ def main():
                             socket_endpoint,
                             event_socket_endpoint,
                             options,
-                            timeout,
-                            protect)
+                            timeout)
 
 
 if __name__ == "__main__":

@@ -21,7 +21,6 @@ def generate_basic(
             "name_expe": "basic_filler_sched_",
             "name": "fillerSched",
             "verbose": False,
-            "protection": True,
             "interpreter": "coverage",
             "options": {
             }
@@ -70,7 +69,6 @@ def generate_sched_static(
             "name_expe": "sched_fillerSched_",
             "name": "schedFiller",
             "verbose": False,
-            "protection": True,
             "interpreter": "coverage",
             "options": {
             },
@@ -80,7 +78,6 @@ def generate_sched_static(
             "name_expe": "sched_backfilling_",
             "name": "schedEasySjfBackfill",
             "verbose": False,
-            "protection": True,
             "interpreter": "coverage",
             "options": {
             },
@@ -130,7 +127,6 @@ def generate_sched_script(
             "name_expe": "sched_fillerSched_",
             "name": "schedFiller",
             "verbose": False,
-            "protection": True,
             "interpreter": "coverage",
             "options": {
             }
@@ -139,7 +135,6 @@ def generate_sched_script(
             "name_expe": "sched_backfilling_",
             "name": "schedEasySjfBackfill",
             "verbose": False,
-            "protection": True,
             "interpreter": "coverage",
             "options": {
             }
@@ -193,7 +188,6 @@ def generate_sched_dynamic(
             "name_expe": "sched_dynamic",
             "name": "tests/schedulers/dynamicTestScheduler.py",
             "verbose": False,
-            "protection": True,
             "interpreter": "coverage",
             "options": {
             }

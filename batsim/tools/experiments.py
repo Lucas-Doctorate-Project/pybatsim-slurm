@@ -254,9 +254,6 @@ def prepare_scheduler_cl(options, verbose):
     if options["scheduler"].get("verbose", False):
         sched_cl.append('-v')
 
-    if options["scheduler"].get("protection", False):
-        sched_cl.append('-p')
-
     if "socket-endpoint" in options["scheduler"]:
         sched_cl.append('-s')
         sched_cl.append(options["scheduler"]["socket-endpoint"])
