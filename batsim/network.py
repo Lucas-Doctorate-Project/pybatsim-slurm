@@ -40,10 +40,13 @@ class NetworkHandler:
 
     def recv_string(self, blocking=False):
         assert self.connection, "Connection not open"
+        # refer to http://api.zeromq.org/4-3:zmq-setsockopt#toc41
         if blocking or self.timeout is None or self.timeout <= 0:
-            self.connection.RCVTIMEO = -1
+            # block until a message is available
+            # (note that we do not use the immediate return mode with timeout == 0)
+            self.connection.setsockopt(zmq.RCVTIMEO, -1)  # -1 is infinite
         else:
-            self.connection.RCVTIMEO = self.timeout
+            self.connection.setsockopt(zmq.RCVTIMEO, self.timeout)
         try:
             msg = self.connection.recv_string()
         except zmq.error.Again:
