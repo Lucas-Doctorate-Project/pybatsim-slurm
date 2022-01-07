@@ -8,9 +8,11 @@
 import argparse
 import io
 import json
+import sys
 
 from pybatsim import __version__
-from pybatsim.plugin import SCHEDULER_ENTRY_POINT, find_plugin_schedulers
+from pybatsim.plugin import (SCHEDULER_ENTRY_POINT, find_ambiguous_scheduler_names,
+    find_plugin_schedulers)
 from pybatsim.batsim.tools.launcher import launch_scheduler as legacy_launch_scheduler
 
 
@@ -101,10 +103,24 @@ def _build_parser():
     return parser
 
 
+def _abort_on_ambiguous_scheduler_name(name):
+    ambiguous_names = find_ambiguous_scheduler_names()
+    if name in ambiguous_names:
+        print(
+            f'Error in definition of \'{SCHEDULER_ENTRY_POINT}\' entry point,',
+            'check your packaging!',
+            f'\'{name}\' is defined more than once, and binds to:',
+            ', '.join(ambiguous_names[name]),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 def main(args=None):
     parser = _build_parser()
     arguments = parser.parse_args(args)
     # instantiate scheduler
+    _abort_on_ambiguous_scheduler_name(arguments.scheduler)
     scheduler = get_scheduler_by_name(arguments.scheduler, options=arguments.scheduler_options)
     # launch simulation
     legacy_launch_scheduler(
