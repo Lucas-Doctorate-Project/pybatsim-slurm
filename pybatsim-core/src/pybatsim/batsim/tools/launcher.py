@@ -8,15 +8,11 @@
 import json
 import sys
 import time
-import types
 from datetime import timedelta
 import importlib.util
 import os.path
 
-from pybatsim.batsim.batsim import Batsim, BatsimScheduler, NetworkHandler
-
-from docopt import docopt
-import zmq
+from pybatsim.batsim.batsim import Batsim
 
 
 def module_to_class(module):
@@ -87,14 +83,7 @@ def instanciate_scheduler(name, options):
                 mod, my_class))
             sys.exit(1)
 
-    if isinstance(scheduler_non_instancied, types.FunctionType):
-        from pybatsim.batsim.sched import as_scheduler
-        scheduler = as_scheduler()(scheduler_non_instancied)
-        scheduler = scheduler(options)
-    else:
-        scheduler = scheduler_non_instancied(options)
-    if not isinstance(scheduler, BatsimScheduler):
-        scheduler = scheduler()
+    scheduler = scheduler_non_instancied(options)
     return scheduler
 
 

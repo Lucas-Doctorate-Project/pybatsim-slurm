@@ -8,9 +8,10 @@
 
 from pybatsim.batsim.sched.algorithms.backfilling import backfilling_sched
 from pybatsim.batsim.sched.algorithms.utils import consecutive_resources_filter
+from pybatsim.batsim.sched.scheduler import as_scheduler, adapt_functional_scheduler
 
 
-def SchedEasySjfBackfill(scheduler):
+def _func_SchedEasySjfBackfill(scheduler):
     kwargs = {}
 
     kwargs["reservation_depth"] = scheduler.options.get(
@@ -27,3 +28,10 @@ def SchedEasySjfBackfill(scheduler):
         scheduler,
         resources_filter=consecutive_resources_filter,
         **kwargs)
+
+
+SchedEasySjfBackfill = adapt_functional_scheduler(
+    as_scheduler()(
+        _func_SchedEasySjfBackfill
+    )
+)

@@ -7,12 +7,12 @@
 
 """
 
-from pybatsim.batsim.sched import Scheduler
 from pybatsim.batsim.sched.algorithms.filling import filler_sched
 from pybatsim.batsim.sched.algorithms.utils import consecutive_resources_filter
+from pybatsim.batsim.sched.scheduler import Scheduler, adapt_functional_scheduler
 
 
-class SchedSendRecv(Scheduler):
+class _func_SchedSendRecv(Scheduler):
 
     def on_job_message(self, job, message):
         if message.type == "accept":
@@ -25,3 +25,6 @@ class SchedSendRecv(Scheduler):
             self,
             resources_filter=consecutive_resources_filter,
             abort_on_first_nonfitting=False)
+
+
+SchedSendRecv = adapt_functional_scheduler(_func_SchedSendRecv)

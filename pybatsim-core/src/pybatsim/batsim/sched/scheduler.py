@@ -662,3 +662,40 @@ def as_scheduler(*args, on_init=[], on_end=[], base_classes=[], **kwargs):
 
         return InheritedScheduler
     return convert_to_scheduler
+
+
+def adapt_functional_scheduler(klass):
+    """
+    Adapt the functional class into a BatsimScheduler subclass.
+
+    This is equivalent to retrieving the object returned by klass.__call__
+    """
+    if not issubclass(klass, Scheduler):
+        raise ValueError(f'{klass} does not implement the functional API.')
+
+    class BatsimSchedulerAdapter(BatsimScheduler):
+        """Adapter class for the classes implemented with the functional API."""
+
+        # the functional scheduler encapsulates the BatsimScheduler, we forward everything there
+        # this is equivalent to using the object returned by _functional_scheduler.__call__
+
+        # this is a dirty hack, but it preserves the functionality of the code
+        # and simplifies the core logic: it should be rewritten
+
+        def __init__(self, options={}):
+            _functional_scheduler = klass(options)
+            object.__setattr__(self, '_functional_scheduler', _functional_scheduler)
+
+        def __getattribute__(self, attr):
+            _functional_scheduler = object.__getattribute__(self, '_functional_scheduler')
+            return getattr(_functional_scheduler._scheduler, attr)
+
+        def __setattr__(self, attr, value):
+            _functional_scheduler = object.__getattribute__(self, '_functional_scheduler')
+            setattr(_functional_scheduler._scheduler, attr, value)
+
+        def __delattr__(self, attr):
+            _functional_scheduler = object.__getattribute__(self, '_functional_scheduler')
+            delattr(_functional_scheduler._scheduler, attr, value)
+
+    return BatsimSchedulerAdapter
