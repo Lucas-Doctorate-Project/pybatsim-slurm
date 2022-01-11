@@ -21,6 +21,8 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
+import time
+
 
 # -- General configuration ------------------------------------------------
 
@@ -50,9 +52,9 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'Pybatsim'
-copyright = '2017, Pybatsim developers'
-author = 'Pybatsim developers'
+project = 'PyBatsim'
+author = 'PyBatsim developers'
+copyright = f'2016–{time.gmtime().tm_year}, {author}'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
