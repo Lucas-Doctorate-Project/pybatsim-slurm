@@ -4,8 +4,7 @@ test:
 
 .PHONY: doc
 doc: clean
-	sphinx-apidoc --force --output-dir=doc/apidoc/batsim/ batsim/
-	sphinx-apidoc --force --output-dir=doc/apidoc/schedulers/ schedulers/
+	sphinx-apidoc --output-dir=doc/apidoc/pybatsim/ src/pybatsim/
 	make --directory=doc/ html
 
 .PHONY: clean
