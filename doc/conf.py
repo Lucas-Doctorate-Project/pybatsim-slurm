@@ -83,6 +83,13 @@ pygments_style = 'sphinx'
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = False
 
+rst_prolog = '''
+.. warning::
+
+   PyBatsim is undergoing a comprehensive refactor.
+   The documentation has not been updated, and does not represent the current
+   state of the project.
+'''
 
 # -- Options for HTML output ----------------------------------------------
 
