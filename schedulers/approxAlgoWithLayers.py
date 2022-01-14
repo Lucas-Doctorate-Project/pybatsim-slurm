@@ -512,6 +512,11 @@ class ApproxAlgoWithLayers(BatsimScheduler):
                         # Save where job should be executed, and what is the container it depends on
                         job.allocation = machine
                         self.mapping_job_container[job.id] = [job, new_job.id]
+
+                        # Add the container as it is already executed in the machine.
+                        # Then other jobs can see it and plan to be in the same machine
+                        container_name = self.downloading_container_as_job(new_job)
+                        self.mapping_machine_container[machine_id].append(container_name)
                 
                     # Or the container is already in the machine, or the job does not require a container, 
                     # so the job can be scheduled
