@@ -3,6 +3,21 @@
     ~~~~~~~~~~~~~~~
 
     PyBatsim plugin interface.
+
+    Register user-defined scheduler via the entry point mechanism.
+
+    The following snippet shows how to register under the name
+    ``yourschedulername`` the user-defined scheduler :py:class:`YourScheduler`
+    defined in the module :py:mod:`yourscheduler`.
+
+    .. code-block:: cfg
+
+       [pybatsim.schedulers]
+       yourschedulername = yourscheduler:YourScheduler
+
+
+    Refer to the documentation of entry points of your packaging tool to
+    register a scheduler.
 """
 
 import collections
@@ -19,6 +34,7 @@ SCHEDULER_ENTRY_POINT = 'pybatsim.schedulers'
 
 
 def find_plugin_schedulers():
+    """Yield the tuples (name, class) of registered schedulers."""
     for scheduler in entry_points(group=SCHEDULER_ENTRY_POINT):
         yield scheduler.name, scheduler.load()
 
