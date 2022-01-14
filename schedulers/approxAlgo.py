@@ -61,7 +61,8 @@ class ApproxAlgo(BatsimScheduler):
         self.original_jobs_scheduled = []
 
 
-    # ----------------------------- ApproxAlgo -----------------------------------------
+# ----------------------------- ApproxAlgo -----------------------------------------
+
     def callsLPAlgo_example(self):
         print("Example!! ")
         N = 7
@@ -75,14 +76,6 @@ class ApproxAlgo(BatsimScheduler):
         p =    [[3, 1, 1, 1, 1, 1, 1],
                 [3, 1, 1, 1, 1, 1, 1],
                 [3, 1, 1, 1, 1, 1, 1]]
-
-        #d =    [[0, 0],
-        #        [0, 0],
-        #        [0, 0]]
-
-        #b =    [[0, 0],
-        #        [0, 0],
-        #        [0, 0]]
 
         b =    [[1, 1, 1, 1, 1, 1, 1],
                 [1, 1, 1, 1, 1, 1, 1],
@@ -178,6 +171,7 @@ class ApproxAlgo(BatsimScheduler):
             job_container_in_mapping_id = self.mapping_container_id.get(job_container)
             list_of_containers.append(job_container_in_mapping_id)
 
+        """
         print(list_of_containers)
         
         print("List of list_of_functions_execution_time", list_of_functions_execution_time)
@@ -193,7 +187,7 @@ class ApproxAlgo(BatsimScheduler):
         print("mapping_container_id ", self.mapping_container_id)
         print("Ids: ", job_id, machine_id, container_id)
         print(" ------------------------------------------  ")
-
+        """
         return job_id, machine_id, container_id,  list_of_functions_execution_time, list_of_functions_cost, list_of_containers_execution_time, list_of_containers_cost, list_of_containers
 
     """
@@ -206,53 +200,36 @@ class ApproxAlgo(BatsimScheduler):
     """
 
     def callsLPAlgo(self, dict_jobs, list_machines_available):
+        
         print(" ------------------------- callsLPAlgo -------------------- ")
         N, M, K, p, c, b, d, env = self.convertBatsimData(dict_jobs, list_machines_available)
-        print("Converting to integer")
-        print("p:", p)
-        print("c:",c)
-        print("b:",b)
-        print("d:",d)
-        print("env:",env)
-        print("N", N)
-        print("M", M)
-        print("K", K)
-        #env =  [0, 0, 0, 0, 0, 0, 0]
-        #print("env:",env)
-        #N = 7
-        #M = 3
-        #K = 3
-        Cmax = 12
-        Tmax = 4
+   
+        Cmax = 1500 #12
+        Tmax = 2000 #4
         
         #self.verifyConstraintsLPAlgo(Cmax, Tmax, M, N, K, c, p, d, b, env)
-        
         status, x, e = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
-        print("LP solution : ", status)
-        print("Solution e: ", e)
-        print("X: ", str(np.round(x, 2)))
-
-        print("Converting to integer")
-        print("N:", N)
-        print("M:",M)
-        print("K:",K)
-        print("c:",c)
-        print("p:",p)
-        print("d:",d)
-        print("b:",b)
-        print("env:",env)
+        
+        print("LP solution status : ", status)
+        print("Fractional Solution:")
+        print_as_matrix(e)
+        print("c:")
+        print_as_matrix(c)
+        print("p:")
+        print_as_matrix(c)
         print("Cmax:",Cmax)
         print("Tmax:",Tmax)
+        
         x_a, e_a = to_integer_solution(x, M, N, K, c, p, d, b, env)
 
         print("Integerized solution : ")
-        print(x_a)
+        print_as_matrix(x_a)
         print(" ------------------------------------------  ")
 
         return x_a
 
     def convertLPSolutionToBatsimFormat(self, lp_solution):
-        print("The solution is: ", lp_solution)
+        print("The solution is: \n", lp_solution)
 
         allocation_dict = {}
         for machine_id in range(0, len(lp_solution)):
@@ -396,7 +373,6 @@ class ApproxAlgo(BatsimScheduler):
         while(len(self.openJobs) > 0):
             # Get the allocation decisions
             approx_algo_allocation = None
-            allocation_decisions = None
             if(len(self.openJobs) == 7):
                 print("Time to call LP")
                 lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
@@ -426,7 +402,7 @@ class ApproxAlgo(BatsimScheduler):
                         break
 
                     job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
-                    download_time_reduction = 0
+                    #download_time_reduction = 0
 
                     machine = ProcSet((machine_id,machine_id)) # Convert the machine id to a ProcSet
                     # If the container is not on the machine, download it there, before scheduling the job
@@ -473,6 +449,11 @@ class ApproxAlgo(BatsimScheduler):
                         # Save where job should be executed, and what is the container it depends on
                         job.allocation = machine
                         self.mapping_job_container[job.id] = [job, new_job.id]
+                        
+                        # Add the container as it is already executed in the machine.
+                        # Then other jobs can see it and plan to be in the same machine
+                        container_name = self.downloading_container_as_job(new_job)
+                        self.mapping_machine_container[machine_id].append(container_name)
                 
                     # Or the container is already in the machine, or the job does not require a container, 
                     # so the job can be scheduled
