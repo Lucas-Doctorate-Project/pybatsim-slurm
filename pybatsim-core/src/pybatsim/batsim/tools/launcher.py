@@ -53,36 +53,3 @@ def launch_scheduler(scheduler,
     #    print("Aborted...")
     #    return 1
     return 0
-
-
-def launch_scheduler_main(
-        scheduler_class,
-        argv=None,
-        standalone=True,
-        **kwargs):
-    for arg in argv or sys.argv[1:]:
-        if arg == "--verbose":
-            kwargs["verbose"] = 999
-        elif arg.startswith("--options="):
-            kwargs["options"] = json.loads(arg[arg.index("=") + 1:])
-        elif arg.startswith("--options-file="):
-            with open(arg) as options_file:
-                kwargs["options"] = json.load(options_file)
-        elif arg.startswith("--timeout="):
-            kwargs["timeout"] = int(arg[arg.index("=") + 1:])
-        elif arg.startswith("--socket-endpoint="):
-            kwargs["socket_endpoint"] = int(arg[arg.index("=") + 1:])
-        elif arg.startswith("--event-socket-endpoint="):
-            kwargs["event_socket_endpoint"] = int(arg[arg.index("=") + 1:])
-        else:
-            print("Invalid argument: {}".format(arg))
-    scheduler = scheduler_class(options)
-
-    ret = launch_scheduler(scheduler, **kwargs)
-
-    if standalone:
-        sys.exit(ret)
-    else:
-        if ret != 0:
-            raise ValueError(
-                "Scheduler exited with return code: {}".format(ret))
