@@ -43,7 +43,6 @@ python = "^3.7.1"
 procset = "^1.0"
 sortedcontainers = "^2.3.0"
 pyzmq = "^22.0.3"
-docopt = "^0.6.2"
 importlib-metadata = {version = ">=3.6", python = "<3.10"}
 
 [tool.poetry.dev-dependencies]
@@ -52,8 +51,6 @@ Sphinx = "^4.3.1"
 
 [tool.poetry.scripts]
 pybatsim = "pybatsim.cmdline:main"
-pybatsim-legacy = "pybatsim.batsim.cmds.launcher:main"
-pybatsim-experiment = "pybatsim.batsim.cmds.experiments:main"
 
 # definition of officialy maintained schedulers
 [tool.poetry.plugins."pybatsim.schedulers"]
