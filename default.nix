@@ -21,8 +21,6 @@ let
         "^src/pybatsim/.\+\.py$"
         "^src/pybatsim/batsim$"
         "^src/pybatsim/batsim/.\+\.py$"
-        "^src/pybatsim/batsim/tools$"
-        "^src/pybatsim/batsim/tools/.\+\.py$"
         "^src/pybatsim/schedulers$"
         "^src/pybatsim/schedulers/.\+\.py$"
         "^src/pybatsim/schedulers/unMaintained$"

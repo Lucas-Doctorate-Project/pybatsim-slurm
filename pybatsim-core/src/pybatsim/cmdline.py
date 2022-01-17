@@ -8,12 +8,14 @@
 import argparse
 import io
 import json
+import logging
 import sys
+import time
 
 from pybatsim import __version__
+from pybatsim.batsim.batsim import Batsim
 from pybatsim.plugin import (SCHEDULER_ENTRY_POINT, find_ambiguous_scheduler_names,
     find_plugin_schedulers)
-from pybatsim.batsim.tools.launcher import launch_scheduler as legacy_launch_scheduler
 
 
 # TODO: relocate under scheduler module?
@@ -116,17 +118,51 @@ def _abort_on_ambiguous_scheduler_name(name):
         sys.exit(1)
 
 
+def run_simulation(scheduler, *, socket_endpoint, event_socket_endpoint, timeout):
+    """Instantiate the connection to Batsim and run the simulation."""
+    batsim = Batsim(
+        scheduler,
+        network_endpoint=socket_endpoint,
+        event_endpoint=event_socket_endpoint,
+        timeout=timeout
+    )
+
+    tstart = time.perf_counter_ns()  # clock of highest resolution
+    batsim.start()
+    tend = time.perf_counter_ns()
+
+    logging.info(f'Simulation ran {(tend - tstart) * 1e-9:e} seconds (elapsed real time)')
+    logging.info(
+        'jobs: ' +
+        ', '.join((
+            f'{batsim.nb_jobs_submitted} submitted',
+            f'{batsim.nb_jobs_scheduled} scheduled',
+            f'{batsim.nb_jobs_rejected} rejected',
+            f'{batsim.nb_jobs_killed} killed',
+            f'{len(batsim.jobs_manually_changed)} changed',
+            f'{batsim.nb_jobs_timeout} timeout',
+            f'{batsim.nb_jobs_successful} success',
+            f'{batsim.nb_jobs_completed} complete',
+        ))
+    )
+
+    # TODO: deport check to Batsim class
+    if batsim.nb_jobs_submitted != \
+       batsim.nb_jobs_scheduled + batsim.nb_jobs_rejected + len(batsim.jobs_manually_changed):
+        sys.exit(1)
+
+
 def main(args=None):
+    logging.basicConfig(level=logging.INFO)
     parser = _build_parser()
     arguments = parser.parse_args(args)
     # instantiate scheduler
     _abort_on_ambiguous_scheduler_name(arguments.scheduler)
     scheduler = get_scheduler_by_name(arguments.scheduler, options=arguments.scheduler_options)
     # launch simulation
-    legacy_launch_scheduler(
+    run_simulation(
         scheduler=scheduler,
         socket_endpoint=arguments.socket_endpoint,
         event_socket_endpoint=arguments.event_socket_endpoint,
-        options=arguments.scheduler_options,
         timeout=arguments.timeout,
     )
