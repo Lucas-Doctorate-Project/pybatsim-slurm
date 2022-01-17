@@ -5,6 +5,7 @@ import os
 import time
 import json
 import math
+import random
 from procset import ProcSet
 from itertools import islice
 
@@ -125,6 +126,8 @@ class ApproxAlgo(BatsimScheduler):
         machine_id = 0
         container_id = 0
 
+        original_job = True
+        
         for machine in list_machines_available:
             function_execution_time_on_machine = []
             functions_cost_on_machine = []
@@ -139,17 +142,27 @@ class ApproxAlgo(BatsimScheduler):
                 self.mapping_job_id[job_id] = job.id
 
                 function_execution_time = int(job.profile_dict['delay'])
-                function_execution_time_on_machine.append(function_execution_time)
-
                 function_cost = int(job.profile_dict['bw'])
-                functions_cost_on_machine.append(function_cost)
-
                 job_container = job.profile_dict['container']['image'] + '_' + job.profile_dict['container']['tag']
                 container_execution_time = int(self.container_description["profiles"][job_container]['delay'])
-                container_execution_time_on_machine.append(container_execution_time)
-
                 container_cost = int(self.container_description["profiles"][job_container]['bw'])
-                containers_cost_on_machine.append(container_cost)
+                
+                if(original_job):
+                    function_execution_time_on_machine.append(function_execution_time)
+                    functions_cost_on_machine.append(function_cost)
+                    container_execution_time_on_machine.append(container_execution_time)
+                    containers_cost_on_machine.append(container_cost)
+                    
+                # Disturb original value at maximum of 100%
+                else:
+                    disturbance_rate = round(random.uniform(10,90),2) * 0.01
+                    disturbance_signal = random.choice([-1, 1])
+
+                    print(disturbance_rate)
+                    function_execution_time_on_machine.append(int(function_execution_time + (function_execution_time * disturbance_rate * disturbance_signal)))
+                    functions_cost_on_machine.append(int(function_cost + (function_cost * disturbance_rate * disturbance_signal)))
+                    container_execution_time_on_machine.append(int(container_execution_time + (container_execution_time * disturbance_rate * disturbance_signal)))
+                    containers_cost_on_machine.append(int(container_cost + (container_cost * disturbance_rate * disturbance_signal)))
 
                 if(self.mapping_container_id.get(job_container) == None):
                     self.mapping_container_id[job_container] = container_id
@@ -164,6 +177,7 @@ class ApproxAlgo(BatsimScheduler):
             list_of_containers_cost.append(containers_cost_on_machine)
 
             machine_id += 1
+            original_job = False
 
         list_of_containers = []
         for job in dict_jobs:
