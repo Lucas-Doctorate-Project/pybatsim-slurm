@@ -200,33 +200,51 @@ class ApproxAlgo(BatsimScheduler):
     """
 
     def callsLPAlgo(self, dict_jobs, list_machines_available):
-        
         print(" ------------------------- callsLPAlgo -------------------- ")
+        
+        # Initialize varibles for the LP Algo
         N, M, K, p, c, b, d, env = self.convertBatsimData(dict_jobs, list_machines_available)
-   
-        Cmax = 1500 #12
-        Tmax = 2000 #4
-        
+        Cmax, Tmax = compute_max_cmax_and_tmax(p, c, b, d)
         #self.verifyConstraintsLPAlgo(Cmax, Tmax, M, N, K, c, p, d, b, env)
-        status, x, e = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
         
+        # Compute the solution using the safe Cmax and Tmax and save it
+        status_basis, x_basis, e_basis = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
+        status, x, e = status_basis, x_basis, e_basis
+        # If there is no solution even with the safe values, finish it
+        if (status == 1):
+            return 1, None
+
+        # Try to optimize the solution and update the safe results only if there is an optimization available.
+        optimzation_factor = 5
+        status_new, x_new, e_new, new_cmax, new_tmax = minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, optimzation_factor)
+        if (status_new == 0):
+            status, x, e = status_new, x_new, e_new
+            Cmax, Tmax = new_cmax, new_tmax
+
+        print("Input matrixes: ")
+        print("c:")
+        print_as_matrix(c)
+        print("d:")
+        print_as_matrix(d)
+        print("p:")
+        print_as_matrix(p)
+        print("b:")
+        print_as_matrix(b)
+
+        print("Cmax:",Cmax)
+        print("Tmax:",Tmax)
+
         print("LP solution status : ", status)
         print("Fractional Solution:")
         print_as_matrix(e)
-        print("c:")
-        print_as_matrix(c)
-        print("p:")
-        print_as_matrix(c)
-        print("Cmax:",Cmax)
-        print("Tmax:",Tmax)
-        
+
         x_a, e_a = to_integer_solution(x, M, N, K, c, p, d, b, env)
 
         print("Integerized solution : ")
         print_as_matrix(x_a)
         print(" ------------------------------------------  ")
 
-        return x_a
+        return 0, x_a
 
     def convertLPSolutionToBatsimFormat(self, lp_solution):
         print("The solution is: \n", lp_solution)
@@ -375,7 +393,9 @@ class ApproxAlgo(BatsimScheduler):
             approx_algo_allocation = None
             if(len(self.openJobs) == 7):
                 print("Time to call LP")
-                lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
+                solution_status, lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
+                if (solution_status == 1):
+                    break
                 approx_algo_allocation = self.convertLPSolutionToBatsimFormat(lp_solution)
             
             if (approx_algo_allocation == None):
