@@ -85,12 +85,11 @@ class CacheLocalityWithLayers(BatsimScheduler):
         else:
             return -1
 
-    def list_machines_with_container(self, job_container):
+    def list_machines_with_container(self, job_container, check_layers=False):
         """
         List machines that already have job_container
         """
 
-        list_of_layers = self.get_layers_from_container(job_container)
         machine_candidates = []
         scores_machine_container = {}
         if(len(self.availableResources) == 0):
@@ -108,7 +107,8 @@ class CacheLocalityWithLayers(BatsimScheduler):
                     machine_candidates.append(machine)
 
                 # Check other container layers, and compute the percetage of matching
-                else:
+                if(check_layers and job_container not in containers_in_machine):
+                    list_of_layers = self.get_layers_from_container(job_container)
                     for container in containers_in_machine:
                         list_of_layers_of_second_container = self.get_layers_from_container(container)
                         for layer in list_of_layers:
@@ -178,7 +178,8 @@ class CacheLocalityWithLayers(BatsimScheduler):
 
             # Search the best machine available, which means, one with the required container
             download_time_reduction = 0
-            machine_candidates, scores_machine_container = self.list_machines_with_container(job_container)
+            check_layers = True
+            machine_candidates, scores_machine_container = self.list_machines_with_container(job_container, check_layers)
             if (len(machine_candidates) != 0):
                 machine = machine_candidates[0]
                 download_time_reduction = scores_machine_container[machine]
@@ -192,6 +193,7 @@ class CacheLocalityWithLayers(BatsimScheduler):
             # If the container is not on the machine, download it there, before scheduling the job
             if (job_container != None and 
                 job_container not in self.mapping_machine_container[int(str(machine))]):
+                
                 new_profile_name = job_container
                 
                 # If there are usefull layers in the allocated machine, create a new profile for such job, with a new delay
@@ -204,7 +206,6 @@ class CacheLocalityWithLayers(BatsimScheduler):
                         new_profile[new_profile_name]["delay"] -= new_delay
                         self.container_description["profiles"][new_profile_name] = new_profile
                         self.bs.register_profiles("w0", new_profile)
-
 
                 # Create a dynamic job
                 new_job = self.bs.register_job(
