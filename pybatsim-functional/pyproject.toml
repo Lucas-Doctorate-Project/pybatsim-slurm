@@ -34,7 +34,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.7.1"
-pybatsim = {path = "../pybatsim-core", develop = true}
+pybatsim = "^4.0.0a0"
 pandas = "^1.2.3"
 
 [tool.poetry.dev-dependencies]
