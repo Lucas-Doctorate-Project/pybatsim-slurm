@@ -5,30 +5,25 @@
 
 let
   self = rec {
-    pybatsim = kapack.pybatsim.overrideAttrs (attrs: rec {
-      name = "${kapack.pybatsim.name}-local";
+    pybatsim-core = kapack.pybatsim-core.overrideAttrs (attrs: rec {
+      name = "${kapack.pybatsim-core.name}-local";
       src = kapack.pkgs.lib.sourceByRegex ./. [
-        "^pyproject\.toml"
-        "^poetry\.lock"
-        "^README\.rst"
-        "^batsim"
-        "^batsim/.*\.py"
-        "^batsim/cmds"
-        "^batsim/cmds/.*\.py"
-        "^batsim/sched"
-        "^batsim/sched/.*\.py"
-        "^batsim/sched/algorithms"
-        "^batsim/sched/algorithms/.*\.py"
-        "^batsim/sched/workloads"
-        "^batsim/sched/workloads/.*\.py"
-        "^batsim/sched/workloads/models"
-        "^batsim/sched/workloads/models/.*\.py"
-        "^batsim/tools"
-        "^batsim/tools/.*\.py"
-        "^schedulers"
-        "^schedulers/.*\.py"
-        "^schedulers/unMaintained"
-        "^schedulers/unMaintained/.*\.py"
+        "^pyproject\.toml$"
+        "^poetry\.lock$"
+        "^README\.rst$"
+        "^src$"
+        "^src/pybatsim$"
+        "^src/pybatsim/.\+\.py$"
+        "^src/pybatsim/batsim$"
+        "^src/pybatsim/batsim/.\+\.py$"
+        "^src/pybatsim/batsim/cmds$"
+        "^src/pybatsim/batsim/cmds/.\+\.py$"
+        "^src/pybatsim/batsim/tools$"
+        "^src/pybatsim/batsim/tools/.\+\.py$"
+        "^src/pybatsim/schedulers$"
+        "^src/pybatsim/schedulers/.\+\.py$"
+        "^src/pybatsim/schedulers/unMaintained$"
+        "^src/pybatsim/schedulers/unMaintained/.\+\.py$"
       ];
     });
   };
