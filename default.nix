@@ -7,6 +7,7 @@
 
 let
   self = rec {
+    lib = kapack.pkgs.lib;
     pybatsim-core = pybatsim-core-base.overrideAttrs (attrs: rec {
       name = "${attrs.name}-local";
       src = kapack.pkgs.lib.sourceByRegex ./pybatsim-core [
@@ -49,6 +50,9 @@ let
         "^src/pybatsim_functional/workloads/models$"
         "^src/pybatsim_functional/workloads/models/.\+\.py$"
       ];
+      # change the pybatsim-core to use (local one, not base one)
+      propagatedBuildInputs = lib.remove pybatsim-core-base attrs.propagatedBuildInputs ++
+        [ pybatsim-core ];
     });
   };
 in
