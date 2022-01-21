@@ -39,18 +39,12 @@ class ApproxAlgo(BatsimScheduler):
             self.list_of_containers.append(container)
 
         #self.workload_size = options["workload_size"]
-        self.workload_size = 200
+        self.workload_size = 1
         #self.random_seed = options["random_seed"]
         self.random_seed = 10
         random.seed(self.random_seed)
         print(self.workload_size, self.random_seed)
         
-        self.machines = {
-            "Jupiter": "10Mf",
-            "Fafard": "20Mf",
-            "Ginette": "30Mf",
-            "Bourassa": "40Mf"
-        }
 
         self.nb_completed_jobs = 0
         self.nb_jobs = 0
@@ -65,6 +59,7 @@ class ApproxAlgo(BatsimScheduler):
 
         self.jobs_completed = []
         self.jobs_waiting = []
+        self.machines_description = {}
         self.mapping_job_container = {}
         self.mapping_machine_container = {}
         self.mapping_jobs_waiting_machines = {}
@@ -142,7 +137,9 @@ class ApproxAlgo(BatsimScheduler):
     def convertBatsimData(self, dict_jobs, list_machines_available):
         print(" --------------- convertBatsimData ---------------------------  ")
         
-        print(self.bs.machines)
+        print("list_machines_available", self.machines_description)
+        for m in self.machines_description:
+            print(m, type(m))
         
         list_of_functions_execution_time = []
         list_of_functions_cost = []
@@ -153,18 +150,27 @@ class ApproxAlgo(BatsimScheduler):
 
         machine_id = 0
         container_id = 0
-
-        original_job = True
         
+        cpu_speed_baseline = self.machines_description[0].split("Mf")[0]
+
         for machine in list_machines_available:
+            if (machine == 0):
+                original_job = True
+            
             function_execution_time_on_machine = []
             functions_cost_on_machine = []
             container_execution_time_on_machine = []
             containers_cost_on_machine = []
             self.mapping_machine_id[machine_id] = machine
             
-            job_id = 0
+            machine_cpu_speed = self.machines_description[machine].split("Mf")[0]
+            disturbance_rate = float(machine_cpu_speed) / float(cpu_speed_baseline)
+            if (disturbance_rate >= 1):
+                disturbance_signal = 1
+            else:
+                disturbance_signal = -1
             
+            job_id = 0
             mapping_container_job = []
             for job in dict_jobs:
                 self.mapping_job_id[job_id] = job.id
@@ -175,25 +181,15 @@ class ApproxAlgo(BatsimScheduler):
                 job_container = job.profile_dict['container']['image'] + '_' + job.profile_dict['container']['tag']
                 if job_container not in list_of_containers:
                     list_of_containers.append(job_container)
-                #container_execution_time = int(self.container_description["profiles"][job_container]['delay'])
-                #container_cost = int(self.container_description["profiles"][job_container]['bw'])
-                
+
+                # Cost is the same for all machines, they are note distubed
+                functions_cost_on_machine.append(function_cost)
+
+                # Disturb original value if not original
                 if(original_job):
                     function_execution_time_on_machine.append(function_execution_time)
-                    functions_cost_on_machine.append(function_cost)
-                    #container_execution_time_on_machine.append(container_execution_time)
-                    #containers_cost_on_machine.append(container_cost)
-                    
-                # Disturb original value at maximum of 100%
                 else:
-                    disturbance_rate = round(random.uniform(10,90),2) * 0.01
-                    disturbance_signal = random.choice([-1, 1])
-
-                    #print(disturbance_rate)
                     function_execution_time_on_machine.append(int(function_execution_time + (function_execution_time * disturbance_rate * disturbance_signal)))
-                    functions_cost_on_machine.append(int(function_cost + (function_cost * disturbance_rate * disturbance_signal)))
-                    #container_execution_time_on_machine.append(int(container_execution_time + (container_execution_time * disturbance_rate * disturbance_signal)))
-                    #containers_cost_on_machine.append(int(container_cost + (container_cost * disturbance_rate * disturbance_signal)))
 
                 if(self.mapping_container_id.get(job_container) == None):
                     self.mapping_container_id[job_container] = container_id
@@ -207,18 +203,14 @@ class ApproxAlgo(BatsimScheduler):
                 container_execution_time = int(self.container_description["profiles"][job_container]['cpu'])
                 container_cost = int(self.container_description["profiles"][job_container]['bw'])
                 
+                # Cost is the same for all machines, they are note distubed
+                containers_cost_on_machine.append(container_cost)
+
+                # Disturb original value if not original
                 if(original_job):
                     container_execution_time_on_machine.append(container_execution_time)
-                    containers_cost_on_machine.append(container_cost)
-                    
-                # Disturb original value at maximum of 100%
                 else:
-                    disturbance_rate = round(random.uniform(10,90),2) * 0.01
-                    disturbance_signal = random.choice([-1, 1])
-
-                    print(disturbance_rate)
                     container_execution_time_on_machine.append(int(container_execution_time + (container_execution_time * disturbance_rate * disturbance_signal)))
-                    containers_cost_on_machine.append(int(container_cost + (container_cost * disturbance_rate * disturbance_signal)))
 
             list_of_functions_execution_time.append(function_execution_time_on_machine)
             list_of_functions_cost.append(functions_cost_on_machine)
@@ -412,6 +404,11 @@ class ApproxAlgo(BatsimScheduler):
                 selected_job = job
         return selected_job
 
+    def get_machines_and_speed(self, machines_resource_description):
+        for machine in machines_resource_description:
+            self.machines_description[machine["id"]] = machine["properties"]["speed"]
+        print(self.machines_description)
+
     def onSimulationBegins(self):
         """
         Verify if the correct flags has been set when the simulation begins
@@ -436,6 +433,7 @@ class ApproxAlgo(BatsimScheduler):
         for availableResource in self.availableResources:
             self.mapping_machine_container[availableResource] = []
             self.mapping_jobs_waiting_machines[availableResource] = []
+        self.get_machines_and_speed(self.bs.machines["compute"])
 
     def onBeforeEvents(self):
         """
