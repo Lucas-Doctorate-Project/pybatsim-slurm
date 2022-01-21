@@ -6,7 +6,7 @@
 let
   self = rec {
     pybatsim-core = kapack.pybatsim-core.overrideAttrs (attrs: rec {
-      name = "${kapack.pybatsim-core.name}-local";
+      name = "${attrs.name}-local";
       src = kapack.pkgs.lib.sourceByRegex ./pybatsim-core [
         "^pyproject\.toml$"
         "^poetry\.lock$"
@@ -27,7 +27,7 @@ let
       ];
     });
     pybatsim-functional = kapack.pybatsim-functional.overrideAttrs (attrs: rec {
-      name = "${kapack.pybatsim-functional.name}-local";
+      name = "${attrs.name}-local";
       src = kapack.pkgs.lib.sourceByRegex ./pybatsim-functional [
         "^pyproject\.toml$"
         "^poetry\.lock$"
