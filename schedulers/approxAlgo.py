@@ -21,12 +21,36 @@ class ApproxAlgo(BatsimScheduler):
         if not os.path.exists(options["container_description_path"]):
                 assert False, "Could not find input path {}".format(options["container_description_path"])
 
+        """
+        assert "workload_size" in options, "The workload size should be given as a CLI option as follows: [pybatsim command] -o \'{\"workload_size\":\"number_of_jobs\"}\'"
+        if not os.path.exists(options["workload_size"]):
+                assert False, "Could not find input path {}".format(options["workload_size"])
+
+        assert "random_seed" in options, "The random seed should be given as a CLI option as follows: [pybatsim command] -o \'{\"random_seed\":\"random_seed\"}\'"
+        if not os.path.exists(options["random_seed"]):
+                assert False, "Could not find input path {}".format(options["random_seed"])
+        """
+
         # Read and save the external profiles (for containers)
         self.list_of_containers = []
         with open(options["container_description_path"]) as f:
             self.container_description = json.load(f)
         for container in self.container_description["profiles"].keys():
             self.list_of_containers.append(container)
+
+        #self.workload_size = options["workload_size"]
+        self.workload_size = 200
+        #self.random_seed = options["random_seed"]
+        self.random_seed = 10
+        random.seed(self.random_seed)
+        print(self.workload_size, self.random_seed)
+        
+        self.machines = {
+            "Jupiter": "10Mf",
+            "Fafard": "20Mf",
+            "Ginette": "30Mf",
+            "Bourassa": "40Mf"
+        }
 
         self.nb_completed_jobs = 0
         self.nb_jobs = 0
@@ -117,6 +141,9 @@ class ApproxAlgo(BatsimScheduler):
 
     def convertBatsimData(self, dict_jobs, list_machines_available):
         print(" --------------- convertBatsimData ---------------------------  ")
+        
+        print(self.bs.machines)
+        
         list_of_functions_execution_time = []
         list_of_functions_cost = []
 
@@ -142,7 +169,8 @@ class ApproxAlgo(BatsimScheduler):
             for job in dict_jobs:
                 self.mapping_job_id[job_id] = job.id
 
-                function_execution_time = int(job.profile_dict['delay'])
+                #function_execution_time = int(job.profile_dict['delay'])
+                function_execution_time = int(job.profile_dict['cpu'])
                 function_cost = int(job.profile_dict['bw'])
                 job_container = job.profile_dict['container']['image'] + '_' + job.profile_dict['container']['tag']
                 if job_container not in list_of_containers:
@@ -161,7 +189,7 @@ class ApproxAlgo(BatsimScheduler):
                     disturbance_rate = round(random.uniform(10,90),2) * 0.01
                     disturbance_signal = random.choice([-1, 1])
 
-                    print(disturbance_rate)
+                    #print(disturbance_rate)
                     function_execution_time_on_machine.append(int(function_execution_time + (function_execution_time * disturbance_rate * disturbance_signal)))
                     functions_cost_on_machine.append(int(function_cost + (function_cost * disturbance_rate * disturbance_signal)))
                     #container_execution_time_on_machine.append(int(container_execution_time + (container_execution_time * disturbance_rate * disturbance_signal)))
@@ -175,7 +203,8 @@ class ApproxAlgo(BatsimScheduler):
                 job_id += 1
 
             for job_container in list_of_containers:
-                container_execution_time = int(self.container_description["profiles"][job_container]['delay'])
+                #container_execution_time = int(self.container_description["profiles"][job_container]['delay'])
+                container_execution_time = int(self.container_description["profiles"][job_container]['cpu'])
                 container_cost = int(self.container_description["profiles"][job_container]['bw'])
                 
                 if(original_job):
@@ -425,7 +454,7 @@ class ApproxAlgo(BatsimScheduler):
         while(len(self.openJobs) > 0):
             # Get the allocation decisions
             approx_algo_allocation = None
-            if(len(self.openJobs) == 7):
+            if(len(self.openJobs) == self.workload_size):
                 print("Time to call LP")
                 solution_status, lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
                 if (solution_status == 1):
