@@ -1,11 +1,13 @@
 { kapack ? import
     (fetchTarball "https://github.com/oar-team/nur-kapack/archive/master.tar.gz")
   {}
+, pybatsim-core-base ? kapack.pybatsim-core
+, pybatsim-functional-base ? kapack.pybatsim-functional
 }:
 
 let
   self = rec {
-    pybatsim-core = kapack.pybatsim-core.overrideAttrs (attrs: rec {
+    pybatsim-core = pybatsim-core-base.overrideAttrs (attrs: rec {
       name = "${attrs.name}-local";
       src = kapack.pkgs.lib.sourceByRegex ./pybatsim-core [
         "^pyproject\.toml$"
@@ -26,7 +28,7 @@ let
         "^src/pybatsim/schedulers/unMaintained/.\+\.py$"
       ];
     });
-    pybatsim-functional = kapack.pybatsim-functional.overrideAttrs (attrs: rec {
+    pybatsim-functional = pybatsim-functional-base.overrideAttrs (attrs: rec {
       name = "${attrs.name}-local";
       src = kapack.pkgs.lib.sourceByRegex ./pybatsim-functional [
         "^pyproject\.toml$"
