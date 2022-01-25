@@ -56,6 +56,32 @@ let
       propagatedBuildInputs = lib.remove pybatsim-core-base attrs.propagatedBuildInputs ++
         [ pybatsim-core ];
     });
+
+    # external scheduler example
+    pybatsim-example = python3Packages.buildPythonPackage rec {
+      pname = "pybatsim-example";
+      version = "local";
+      format = "pyproject";
+
+      src = lib.sourceByRegex ./pybatsim-example [
+        "^pyproject\.toml$"
+        "^poetry\.lock$"
+        "^.*\.py$"
+      ];
+
+      buildInputs = with python3Packages; [
+        poetry
+      ];
+      propagatedBuildInputs = [
+        pybatsim-core
+      ];
+    };
+    # example shell that enables to run the example scheduler (run `pybatsim rejector` in the shell)
+    example-shell = pkgs.mkShell rec {
+      buildInputs = [
+        pybatsim-example
+      ];
+    };
   };
 in
   self
