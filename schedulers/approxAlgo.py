@@ -1,5 +1,6 @@
 from batsim.batsim import BatsimScheduler, Batsim
 
+import csv
 import sys
 import os
 import time
@@ -21,16 +22,26 @@ class ApproxAlgo(BatsimScheduler):
         if not os.path.exists(options["container_description_path"]):
                 assert False, "Could not find input path {}".format(options["container_description_path"])
 
-        """
-        assert "workload_size" in options, "The workload size should be given as a CLI option as follows: [pybatsim command] -o \'{\"workload_size\":\"number_of_jobs\"}\'"
-        if not os.path.exists(options["workload_size"]):
-                assert False, "Could not find input path {}".format(options["workload_size"])
+        if "download_info_csv_path" in options:
+            self.download_info_csv_path = options["download_info_csv_path"]
+        else:
+            assert False, "Could not find input path {}".format(options["download_info_csv_path"])
 
-        assert "random_seed" in options, "The random seed should be given as a CLI option as follows: [pybatsim command] -o \'{\"random_seed\":\"random_seed\"}\'"
-        if not os.path.exists(options["random_seed"]):
-                assert False, "Could not find input path {}".format(options["random_seed"])
-        """
+        if "workload_size" in options:
+            self.workload_size = options["workload_size"]
+        else:
+            assert False, "Could not find input path {}".format(options["workload_size"])
 
+        if "random_seed" in options:
+            self.random_seed = options["random_seed"]
+        else:
+            assert False, "Could not find input path {}".format(options["random_seed"])
+
+        if "optimization_factor" in options:
+            self.approx_algo_optimization_factor = options["optimization_factor"]
+        else:
+            assert False, "Could not find input path {}".format(options["optimization_factor"])            
+        
         # Read and save the external profiles (for containers)
         self.list_of_containers = []
         with open(options["container_description_path"]) as f:
@@ -38,17 +49,13 @@ class ApproxAlgo(BatsimScheduler):
         for container in self.container_description["profiles"].keys():
             self.list_of_containers.append(container)
 
-        #self.workload_size = options["workload_size"]
-        self.workload_size = 1
-        #self.random_seed = options["random_seed"]
-        self.random_seed = 10
         random.seed(self.random_seed)
-        print(self.workload_size, self.random_seed)
-        
 
         self.nb_completed_jobs = 0
         self.nb_jobs = 0
         self.nb_container_downloaded = 0
+        self.total_io_mb = 0
+        self.total_container_downloaded_mb = 0
 
         self.notify_already_sent = False
         self.end_of_simulation_asked = False
@@ -136,61 +143,41 @@ class ApproxAlgo(BatsimScheduler):
 
     def convertBatsimData(self, dict_jobs, list_machines_available):
         print(" --------------- convertBatsimData ---------------------------  ")
-        
-        print("list_machines_available", self.machines_description)
-        for m in self.machines_description:
-            print(m, type(m))
-        
+
         list_of_functions_execution_time = []
         list_of_functions_cost = []
-
         list_of_containers = []
         list_of_containers_execution_time = []
         list_of_containers_cost = []
 
         machine_id = 0
         container_id = 0
-        
-        cpu_speed_baseline = self.machines_description[0].split("Mf")[0]
+        #cpu_speed_baseline = self.machines_description[0].split("Mf")[0]
 
         for machine in list_machines_available:
-            if (machine == 0):
-                original_job = True
-            
             function_execution_time_on_machine = []
             functions_cost_on_machine = []
             container_execution_time_on_machine = []
             containers_cost_on_machine = []
+
             self.mapping_machine_id[machine_id] = machine
-            
             machine_cpu_speed = self.machines_description[machine].split("Mf")[0]
-            disturbance_rate = float(machine_cpu_speed) / float(cpu_speed_baseline)
-            if (disturbance_rate >= 1):
-                disturbance_signal = 1
-            else:
-                disturbance_signal = -1
-            
             job_id = 0
-            mapping_container_job = []
             for job in dict_jobs:
                 self.mapping_job_id[job_id] = job.id
 
-                #function_execution_time = int(job.profile_dict['delay'])
-                function_execution_time = int(job.profile_dict['cpu'])
-                function_cost = int(job.profile_dict['bw'])
+                function_computation_needed = float(job.profile_dict['cpu'])
+                function_execution_time = round((function_computation_needed / float(machine_cpu_speed)) / 1000000, 2)
+                if (function_execution_time <= 0 ):
+                    function_execution_time = 1
+                function_cost = int(job.profile_dict['io'])
                 job_container = job.profile_dict['container']['image'] + '_' + job.profile_dict['container']['tag']
                 if job_container not in list_of_containers:
                     list_of_containers.append(job_container)
 
                 # Cost is the same for all machines, they are note distubed
                 functions_cost_on_machine.append(function_cost)
-
-                # Disturb original value if not original
-                if(original_job):
-                    function_execution_time_on_machine.append(function_execution_time)
-                else:
-                    function_execution_time_on_machine.append(int(function_execution_time + (function_execution_time * disturbance_rate * disturbance_signal)))
-
+                function_execution_time_on_machine.append(function_execution_time)
                 if(self.mapping_container_id.get(job_container) == None):
                     self.mapping_container_id[job_container] = container_id
                     container_id += 1
@@ -199,26 +186,22 @@ class ApproxAlgo(BatsimScheduler):
                 job_id += 1
 
             for job_container in list_of_containers:
-                #container_execution_time = int(self.container_description["profiles"][job_container]['delay'])
-                container_execution_time = int(self.container_description["profiles"][job_container]['cpu'])
-                container_cost = int(self.container_description["profiles"][job_container]['bw'])
-                
+                container_computation_needed = float(self.container_description["profiles"][job_container]['cpu'])
+                container_execution_time = round((container_computation_needed / float(machine_cpu_speed)) / 1000000, 2)
+                if (container_execution_time <= 0 ):
+                    container_execution_time = 1
+                container_cost = int(self.container_description["profiles"][job_container]['size'])
+
                 # Cost is the same for all machines, they are note distubed
                 containers_cost_on_machine.append(container_cost)
-
-                # Disturb original value if not original
-                if(original_job):
-                    container_execution_time_on_machine.append(container_execution_time)
-                else:
-                    container_execution_time_on_machine.append(int(container_execution_time + (container_execution_time * disturbance_rate * disturbance_signal)))
-
+                container_execution_time_on_machine.append(container_execution_time)
+            
             list_of_functions_execution_time.append(function_execution_time_on_machine)
             list_of_functions_cost.append(functions_cost_on_machine)
             list_of_containers_execution_time.append(container_execution_time_on_machine)
             list_of_containers_cost.append(containers_cost_on_machine)
 
             machine_id += 1
-            original_job = False
 
         list_of_containers = []
         for job in dict_jobs:
@@ -226,23 +209,8 @@ class ApproxAlgo(BatsimScheduler):
             job_container_in_mapping_id = self.mapping_container_id.get(job_container)
             list_of_containers.append(job_container_in_mapping_id)
 
-        """
-        print(list_of_containers)
-        
-        print("List of list_of_functions_execution_time", list_of_functions_execution_time)
-        print("List of list_of_functions_cost", list_of_functions_cost)
-        print("List of list_of_containers_execution_time", list_of_containers_execution_time)
-        print("List of list_of_containers_cost", list_of_containers_cost)
-        print("List of list_of_containers_jobs", list_of_containers)
+        print("Preparou tudo!")
 
-        print("mapping_machine_id ", self.mapping_machine_id)
-        print("mapping_job_id ", self.mapping_job_id)
-        print("mapping_container_id ", self.mapping_container_id)
-        print("mapping_container_job ", self.mapping_container_job)
-        print("mapping_container_id ", self.mapping_container_id)
-        print("Ids: ", job_id, machine_id, container_id)
-        print(" ------------------------------------------  ")
-        """
         return job_id, machine_id, container_id,  list_of_functions_execution_time, list_of_functions_cost, list_of_containers_execution_time, list_of_containers_cost, list_of_containers
 
     """
@@ -270,11 +238,12 @@ class ApproxAlgo(BatsimScheduler):
             return 1, None
 
         # Try to optimize the solution and update the safe results only if there is an optimization available.
-        optimzation_factor = 5
-        status_new, x_new, e_new, new_cmax, new_tmax = minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, optimzation_factor)
-        if (status_new == 0):
-            status, x, e = status_new, x_new, e_new
-            Cmax, Tmax = new_cmax, new_tmax
+        optimization_factor = self.approx_algo_optimization_factor
+        if (optimization_factor != 0):
+            status_new, x_new, e_new, new_cmax, new_tmax = minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, optimization_factor)
+            if (status_new == 0):
+                status, x, e = status_new, x_new, e_new
+                Cmax, Tmax = new_cmax, new_tmax
 
         print("Input matrixes: ")
         print("c:")
@@ -319,7 +288,26 @@ class ApproxAlgo(BatsimScheduler):
         return allocation_dict
 
 # ----------------------------- ApproxAlgo -----------------------------------------
+    def save_output_as_csv(self, file_name, json_data):
+        print("Saving output")
+        header = []
+        data = []    
 
+        for key,value in json_data.items():
+            header.append(key)
+            data.append(value)
+
+        print(header, data)
+
+        with open(file_name, 'w', encoding='UTF8') as f:
+            writer = csv.writer(f)
+
+            # write the header
+            writer.writerow(header)
+            # write the data
+            writer.writerow(data)
+        return
+        
     def downloading_container_as_job(self, job):
         """
         Check if the job is a dynamic job representing a container being downloaded.
@@ -453,7 +441,6 @@ class ApproxAlgo(BatsimScheduler):
             # Get the allocation decisions
             approx_algo_allocation = None
             if(len(self.openJobs) == self.workload_size):
-                print("Time to call LP")
                 solution_status, lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
                 if (solution_status == 1):
                     break
@@ -461,7 +448,6 @@ class ApproxAlgo(BatsimScheduler):
             
             if (approx_algo_allocation == None):
                 break
-
             # Since we have the allocation of a set of tasks, per machine, lets allocate the possible ones, 
             # and put the rest in a waiting list.
 
@@ -470,7 +456,7 @@ class ApproxAlgo(BatsimScheduler):
                 # per job
                 while(len(approx_algo_allocation[machine_id]) > 0):
                     job_id = approx_algo_allocation[machine_id].pop(0)
-
+                    
                     job = None
                     for open_job in self.openJobs:
                         if open_job.id == job_id:
@@ -482,7 +468,9 @@ class ApproxAlgo(BatsimScheduler):
                         #approx_algo_allocation[machine_id].pop(job_id)
                         break
 
+                    job_io_size = job.profile_dict["io"]
                     job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
+                    job_container_size = self.container_description["profiles"][job_container]["size"]
                     #download_time_reduction = 0
 
                     machine = ProcSet((machine_id,machine_id)) # Convert the machine id to a ProcSet
@@ -512,6 +500,7 @@ class ApproxAlgo(BatsimScheduler):
                                 subtime=None)
                     
                         self.container_jobs_scheduled.append(new_job)
+                        self.total_container_downloaded_mb += job_container_size
                         
                         # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
                         new_job.allocation = machine
@@ -550,6 +539,7 @@ class ApproxAlgo(BatsimScheduler):
                         self.nb_jobs += 1
 
                     self.openJobs.remove(job)
+                    self.total_io_mb += job_io_size
                 self.availableResources -= machine
 
             # If all jobs were processed, break the loop to avoid iterating in the first loop for nothing
@@ -613,10 +603,17 @@ class ApproxAlgo(BatsimScheduler):
                 self.availableResources -= job.allocation
                 self.bs.execute_jobs(scheduledJobs)
 
-        # Check if the simulation is finished
-        if(len(self.openJobs) == 0 and len(self.jobs_completed) == self.bs.nb_jobs_submitted):
-            self.bs.notify_registration_finished()
-            self.notify_already_sent = True
-
         if(len(self.openJobs) != 0):
             self.scheduleJobs()
+
+    def onNoMoreEvents(self):
+        if(self.bs.nb_jobs_submitted != 0 and len(self.openJobs) == 0 and len(self.jobs_completed) == self.bs.nb_jobs_submitted and self.notify_already_sent == False):
+            self.notify_already_sent = True
+            self.bs.notify_registration_finished()
+
+            output_data = {
+                "total_io": self.total_io_mb,
+                "total_container_downloaded": self.total_container_downloaded_mb, 
+                "total_data_downloaded": self.total_io_mb + self.total_container_downloaded_mb
+            }
+            self.save_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)            
