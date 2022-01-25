@@ -1,6 +1,7 @@
 from pickle import FALSE
 from batsim.batsim import BatsimScheduler, Batsim
 
+import csv
 import sys
 import os
 import time
@@ -19,6 +20,21 @@ class CacheLocality(BatsimScheduler):
         assert "container_description_path" in options, "The path to the input files should be given as a CLI option as follows: [pybatsim command] -o \'{\"input_path\":\"path/to/input/files\"}\'"
         if not os.path.exists(options["container_description_path"]):
                 assert False, "Could not find input path {}".format(options["container_description_path"])
+                
+        if "download_info_csv_path" in options:
+            self.download_info_csv_path = options["download_info_csv_path"]
+        else:
+            assert False, "Could not find input path {}".format(options["download_info_csv_path"])
+
+        if "workload_size" in options:
+            self.workload_size = options["workload_size"]
+        else:
+            assert False, "Could not find input path {}".format(options["workload_size"])
+
+        if "random_seed" in options:
+            self.random_seed = options["random_seed"]
+        else:
+            assert False, "Could not find input path {}".format(options["random_seed"])
 
         # Read and save the external profiles (for containers)
         self.list_of_containers = []
@@ -30,6 +46,8 @@ class CacheLocality(BatsimScheduler):
         self.nb_completed_jobs = 0
         self.nb_jobs = 0
         self.nb_container_downloaded = 0
+        self.total_container_downloaded_mb = 0
+        self.total_io_mb = 0
 
         self.notify_already_sent = False
         self.end_of_simulation_asked = False
@@ -52,6 +70,26 @@ class CacheLocality(BatsimScheduler):
         self.container_jobs_scheduled = []
         self.container_jobs_executed = []
         self.original_jobs_scheduled = []
+
+    def save_output_as_csv(self, file_name, json_data):
+        print("Saving output")
+        header = []
+        data = []    
+
+        for key,value in json_data.items():
+            header.append(key)
+            data.append(value)
+
+        print(header, data)
+
+        with open(file_name, 'w', encoding='UTF8') as f:
+            writer = csv.writer(f)
+
+            # write the header
+            writer.writerow(header)
+            # write the data
+            writer.writerow(data)
+        return
 
     def downloading_container_as_job(self, job):
         """
@@ -170,11 +208,15 @@ class CacheLocality(BatsimScheduler):
         The decion process. It will check if the machines have containers required by the jobs.
         If not, dybamic jobs will be created, and these jobs will represent the downloading of containers.
         """
+        while(len(self.openJobs) != self.workload_size):
+            break
         scheduledJobs = []
         while(len(self.openJobs) > 0):
             job = self.get_earliest_submitted_job()
+            #print("job.profile_dict:", job)
+            job_io_size = job.profile_dict["io"]
             job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
-
+            job_container_size = self.container_description["profiles"][job_container]["size"]
             # Search the best machine available, which means, one with the required container
             download_time_reduction = 0
             machine_candidates, scores_machine_container = self.list_machines_with_container(job_container)
@@ -214,6 +256,7 @@ class CacheLocality(BatsimScheduler):
                         subtime=None)
                 
                 self.container_jobs_scheduled.append(new_job)
+                self.total_container_downloaded_mb += job_container_size
 
                 # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
                 new_job.allocation = machine
@@ -223,7 +266,6 @@ class CacheLocality(BatsimScheduler):
                 job.allocation = machine
                 self.mapping_job_container[job.id] = [job, new_job.id]
                 
-
                 self.nb_jobs += 2
                 self.nb_container_downloaded += 1
             
@@ -237,7 +279,8 @@ class CacheLocality(BatsimScheduler):
                 scheduledJobs.append(job)
 
                 self.nb_jobs += 1
-  
+
+            self.total_io_mb += job_io_size
             self.availableResources -= machine
             self.openJobs.remove(job)
 
@@ -313,19 +356,13 @@ class CacheLocality(BatsimScheduler):
             self.scheduleJobs()
 
     def onNoMoreEvents(self):
-        #print("Heeeeeeeeeeeere")
-        #print("self.openJobs", len(self.openJobs))
-        #print("self.jobs_completed", len(self.jobs_completed))
-        #print("self.bs.nb_jobs_submitted", self.bs.nb_jobs_submitted)
-        #print("self.notify_already_sent", self.notify_already_sent)
-
-        # Check if the simulation is finished
         if(self.bs.nb_jobs_submitted != 0 and len(self.openJobs) == 0 and len(self.jobs_completed) == self.bs.nb_jobs_submitted and self.notify_already_sent == False):
-            #print("hey")
             self.notify_already_sent = True
             self.bs.notify_registration_finished()
-        #    print("Notified finished")
-        #    self.bs.notify_registration_finished()
-        #    self.notify_already_sent = True
-        #else:
-            #print("how")
+
+            output_data = {
+                "total_io": self.total_io_mb,
+                "total_container_downloaded": self.total_container_downloaded_mb, 
+                "total_data_downloaded": self.total_io_mb + self.total_container_downloaded_mb
+            }
+            self.save_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)
