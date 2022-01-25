@@ -151,22 +151,18 @@ def compute_max_cmax_and_tmax(c, p, b, d, K, M, N):
     """
     cmax = 0
     tmax = 0
-    # TODO To reverse the matrix to get the maximum per column and not per line
-    # Here, iterating per line means iterating per machine and not per tasks.
     max_env_cost_per_machine = []
     max_env_processing_time_per_machine = []
+
     for i in range(0, K):
-        print(i)
         max_env_cost_per_machine.append(max(map(lambda x: x[i], d)))
         max_env_processing_time_per_machine.append(max(map(lambda x: x[i], b)))
-    print(max_env_cost_per_machine, max_env_processing_time_per_machine)
 
     max_function_cost_per_machine = []
     max_function_processing_time_per_machine = []
     for i in range(0, N):
         max_function_cost_per_machine.append(max(map(lambda x: x[i], c)))
         max_function_processing_time_per_machine.append(max(map(lambda x: x[i], p)))
-    print(max_function_cost_per_machine, max_function_processing_time_per_machine)
     
     cmax = M * sum(max_env_cost_per_machine) + sum(max_function_cost_per_machine)
     tmax = M * sum(max_env_processing_time_per_machine) + sum(max_function_processing_time_per_machine)
@@ -181,11 +177,11 @@ def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, facto
     new_cmax = Cmax - Cmax/factor
     new_tmax = Tmax - Tmax/factor
     """
+    print("------------------------- minimize_cmax_and_tmax_by_factor: ", factor)
     new_tmax = Tmax - Tmax/factor
     status_new, x_new, e_new = LP(Cmax, new_tmax, M, N, K, c, p, d, b, env)
-    print("Solution updated first", new_tmax)
     while(status_new == 0 and new_tmax > 0):
-        print("Solution updated!", new_tmax)
+        print("Trying new Tmax")
         status, x, e = status_new, x_new, e_new
         Tmax = new_tmax
 
@@ -194,15 +190,14 @@ def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, facto
 
     new_cmax = Cmax - Cmax/factor
     status_new, x_new, e_new = LP(new_cmax, Tmax, M, N, K, c, p, d, b, env)
-    print("Solution updated first", new_cmax)
     while(status_new == 0 and new_cmax > 0):
-        print("Solution updated!", new_cmax)
+        print("Trying new Cmax")
         status, x, e = status_new, x_new, e_new
         Cmax = new_cmax
 
         new_cmax = new_cmax - new_cmax/factor   
         status_new, x_new, e_new = LP(new_cmax, Tmax, M, N, K, c, p, d, b, env)
-    
+    print("Finished")
     return status, x, e, Cmax, Tmax
 
 
