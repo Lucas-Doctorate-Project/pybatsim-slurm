@@ -177,26 +177,75 @@ def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, facto
     new_cmax = Cmax - Cmax/factor
     new_tmax = Tmax - Tmax/factor
     """
+    print("New !!!")
+    new_tmax = Tmax
+    new_cmax = Cmax
+    Cmax, Tmax = 0, 0
+
+    # Intialize
+    status_new, x_new, e_new = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
+
+    while(new_cmax != Cmax or new_tmax != Tmax):
+        print("Debut boucle", new_cmax, new_tmax)
+        # Try to move Cmax
+        status, x, e = status_new, x_new, e_new
+        Cmax = int(new_cmax)
+
+        new_cmax = int(new_cmax - new_cmax/factor)
+        status_new, x_new, e_new = LP(new_cmax, Tmax, M, N, K, c, p, d, b, env)
+        
+        # No solution, revert to previous solution
+        if status_new != 0 :
+            status_new, x_new, e_new == status, x, e
+            new_cmax = int(Cmax)
+
+        # Try to move Tmax
+        status, x, e = status_new, x_new, e_new
+        Tmax = int(new_tmax)
+
+        new_tmax = int(new_tmax - new_tmax/factor)
+        status_new, x_new, e_new = LP(Cmax, new_tmax, M, N, K, c, p, d, b, env)  
+
+        # No solution, revert to previous solution
+        if status_new != 0 :
+            status_new, x_new, e_new == status, x, e
+            new_tmax = int(Tmax)
+        print("Fin boucle", new_cmax, new_tmax)
+
+    return status, x, e, Cmax, Tmax
+
+def minimize_cmax_and_tmax_by_factor_direct(Cmax, Tmax, M, N, K, c, p, d, b, env, factor):
+    """
+    Receive all parameters to compute the LP.
+    It tries as far as possible to decrease Cmax and Tmax to find a better solution.
+    It will descrease them as follows:
+    new_cmax = Cmax - Cmax/factor
+    new_tmax = Tmax - Tmax/factor
+    """
     print("------------------------- minimize_cmax_and_tmax_by_factor: ", factor)
     new_tmax = Tmax - Tmax/factor
     status_new, x_new, e_new = LP(Cmax, new_tmax, M, N, K, c, p, d, b, env)
     while(status_new == 0 and new_tmax > 0):
+        print("Debut boucle new_tmax", new_tmax)
         print("Trying new Tmax")
         status, x, e = status_new, x_new, e_new
-        Tmax = new_tmax
+        Tmax = int(new_tmax)
 
-        new_tmax = new_tmax - new_tmax/factor   
-        status_new, x_new, e_new = LP(Cmax, new_tmax, M, N, K, c, p, d, b, env)  
+        new_tmax = int(new_tmax - new_tmax/factor)   
+        status_new, x_new, e_new = LP(Cmax, new_tmax, M, N, K, c, p, d, b, env)
+        print("Fin boucle new_tmax", new_tmax)  
 
     new_cmax = Cmax - Cmax/factor
     status_new, x_new, e_new = LP(new_cmax, Tmax, M, N, K, c, p, d, b, env)
     while(status_new == 0 and new_cmax > 0):
+        print("Debut boucle new_cmax", new_cmax)
         print("Trying new Cmax")
         status, x, e = status_new, x_new, e_new
-        Cmax = new_cmax
+        Cmax = int(new_cmax)
 
-        new_cmax = new_cmax - new_cmax/factor   
+        new_cmax = int(new_cmax - new_cmax/factor)
         status_new, x_new, e_new = LP(new_cmax, Tmax, M, N, K, c, p, d, b, env)
+        print("Fin boucle Cmax", new_cmax)
     print("Finished")
     return status, x, e, Cmax, Tmax
 
