@@ -240,7 +240,9 @@ class ApproxAlgo(BatsimScheduler):
         # Try to optimize the solution and update the safe results only if there is an optimization available.
         optimization_factor = self.approx_algo_optimization_factor
         if (optimization_factor != 0):
+            print("NEEEEW")
             status_new, x_new, e_new, new_cmax, new_tmax = minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, optimization_factor)
+            print(" NEW: new_cmax, new_tmax", new_cmax, new_tmax)
             if (status_new == 0):
                 status, x, e = status_new, x_new, e_new
                 Cmax, Tmax = new_cmax, new_tmax
@@ -613,7 +615,9 @@ class ApproxAlgo(BatsimScheduler):
 
             output_data = {
                 "total_io": self.total_io_mb,
-                "total_container_downloaded": self.total_container_downloaded_mb, 
-                "total_data_downloaded": self.total_io_mb + self.total_container_downloaded_mb
+                "total_container_data_downloaded_mb": self.total_container_downloaded_mb, 
+                "nb_container_downloaded": self.nb_container_downloaded,
+                "total_io_data_mb": self.total_io_mb + self.total_container_downloaded_mb
+                
             }
             self.save_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)            

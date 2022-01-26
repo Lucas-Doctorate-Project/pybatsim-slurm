@@ -362,7 +362,8 @@ class CacheLocality(BatsimScheduler):
 
             output_data = {
                 "total_io": self.total_io_mb,
-                "total_container_downloaded": self.total_container_downloaded_mb, 
-                "total_data_downloaded": self.total_io_mb + self.total_container_downloaded_mb
+                "total_container_data_downloaded_mb": self.total_container_downloaded_mb, 
+                "nb_container_downloaded": self.nb_container_downloaded,
+                "total_io_data_mb": self.total_io_mb + self.total_container_downloaded_mb
             }
             self.save_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)
