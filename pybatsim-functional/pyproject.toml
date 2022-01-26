@@ -1,0 +1,47 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "pybatsim-functional"
+version = "4.0.0-alpha.0"
+description = "Functional API for PyBatsim"
+keywords = [
+  "scheduler",
+  "simulation",
+]
+repository = "https://gitlab.inria.fr/batsim/pybatsim"
+authors = [
+  "Steffen Lackner <lackner@cs.tu-darmstadt.de>",
+  "Michael Mercier <michael.mercier@inria.fr>",
+  "Clément Mommessin <clement.mommessin@inria.fr>",
+]
+maintainers = [
+  "Raphaël Bleuse <raphael.bleuse@inria.fr>",
+]
+license = "LGPL-3.0-only"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering",
+  "Topic :: System :: Distributed Computing",
+]
+packages = [
+  {include = "pybatsim_functional", from = "src"},
+]
+
+[tool.poetry.dependencies]
+python = "^3.7.1"
+pybatsim = "^4.0.0a0"
+pandas = "^1.2.3"
+
+[tool.poetry.dev-dependencies]
+
+# definition of PyBatsim schedulers
+[tool.poetry.plugins."pybatsim.schedulers"]
+"func:backfill-sjf" = "pybatsim_functional.schedulers.schedEasySjfBackfill:SchedEasySjfBackfill"
+"func:fcfs" = "pybatsim_functional.schedulers.schedFcfs:SchedFcfs"
+"func:filler" = "pybatsim_functional.schedulers.schedFiller:SchedFiller"
+"func:send-recv" = "pybatsim_functional.schedulers.schedSendRecv:SchedSendRecv"
