@@ -186,7 +186,6 @@ def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, facto
     status_new, x_new, e_new = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
 
     while(new_cmax != Cmax or new_tmax != Tmax):
-        print("Debut boucle", new_cmax, new_tmax)
         # Try to move Cmax
         status, x, e = status_new, x_new, e_new
         Cmax = int(new_cmax)
@@ -210,7 +209,6 @@ def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, facto
         if status_new != 0 :
             status_new, x_new, e_new == status, x, e
             new_tmax = int(Tmax)
-        print("Fin boucle", new_cmax, new_tmax)
 
     return status, x, e, Cmax, Tmax
 
@@ -249,6 +247,116 @@ def minimize_cmax_and_tmax_by_factor_direct(Cmax, Tmax, M, N, K, c, p, d, b, env
     print("Finished")
     return status, x, e, Cmax, Tmax
 
+def minimize_cmax_and_tmax_by_factor_cmax(Cmax, Tmax, M, N, K, c, p, d, b, env, factor):
+    # Iterative Binary Search Function
+    # It returns index of x in given array arr if present,
+    # else returns -1
+    low_cmax = 0
+    high_cmax = Cmax#len(arr) - 1
+    mid_cmax = 0
+    print("Starting binary search", low_cmax, mid_cmax, high_cmax, abs(high_cmax - low_cmax))
+    print("e ai?: ", abs(high_cmax - low_cmax) < 0.001)
+    while (low_cmax <= high_cmax and int(abs(high_cmax - low_cmax)) >= 10):
+        print("e ai?: ", round(abs(high_cmax - low_cmax),2) >= 0.001)
+        print("Entrou", low_cmax, mid_cmax, high_cmax, abs(high_cmax - low_cmax))
+        mid_cmax = round((high_cmax + low_cmax) / 2,2)
+        print("Aqui")
+        status_new, x_new, e_new = LP(mid_cmax, Tmax, M, N, K, c, p, d, b, env)
+        
+        print("status_new: ", status_new, mid_cmax)
+        # If x is greater, ignore left half
+        if status_new == 0:
+            print("Update high_cmax")
+            high_cmax = mid_cmax
+        # No solution, revert to previous solution
+        else:
+            low_cmax = mid_cmax
+
+        print("Going to restart the loop: ", low_cmax, mid_cmax, high_cmax, round(abs(high_cmax - low_cmax),2))
+    print("Got out of the loop", low_cmax, mid_cmax, high_cmax)
+
+    # If we reach here, then the element was not present
+    if (status_new == 0):
+        return status_new, x_new, e_new, high_cmax, Tmax
+    else:
+        return 1, x_new, e_new, mid_cmax, Tmax
+
+def minimize_cmax_and_tmax_by_factor_binary_search(Cmax, Tmax, M, N, K, c, p, d, b, env, factor):
+    # Iterative Binary Search Function
+    # It returns index of x in given array arr if present,
+    # else returns -1
+    
+    low_cmax = 0
+    high_cmax = Cmax
+    mid_cmax = 0
+
+    low_tmax = 0
+    high_tmax = Tmax
+    mid_tmax = 0
+
+    tmax_turn = True
+
+    status_cmax = 1
+
+    print("Starting binary search", low_cmax, mid_cmax, high_cmax, abs(high_cmax - low_cmax))
+    print("e ai?: ", abs(high_cmax - low_cmax) < 0.001)
+    while (
+        (low_cmax <= high_cmax and int(abs(high_cmax - low_cmax)) >= 10) or 
+        (low_tmax <= high_tmax and int(abs(high_tmax - low_tmax)) >= 10)):
+
+        if(tmax_turn):
+            mid_tmax = round((high_tmax + low_tmax) / 2,2)
+
+            if(status_cmax == 0):
+                status_tmax, x_new, e_new = LP(mid_cmax, mid_tmax, M, N, K, c, p, d, b, env)
+            else:
+                status_tmax, x_new, e_new = LP(high_cmax, mid_tmax, M, N, K, c, p, d, b, env)
+            
+            # If x is greater, ignore left half
+            if status_tmax == 0:
+                print("Update high_tmax")
+                high_tmax = mid_tmax
+
+                tmax_turn = False
+
+            # No solution, revert to previous solution
+            else:
+                low_tmax = mid_tmax
+                   
+        else:
+            mid_cmax = round((high_cmax + low_cmax) / 2,2)
+
+            if(status_tmax == 0):
+                status_cmax, x_new, e_new = LP(mid_cmax, mid_tmax, M, N, K, c, p, d, b, env)
+            else:
+                status_cmax, x_new, e_new = LP(mid_cmax, high_tmax, M, N, K, c, p, d, b, env)
+
+            status_cmax, x_new, e_new = LP(mid_cmax, Tmax, M, N, K, c, p, d, b, env)
+            
+            # If x is greater, ignore left half
+            if status_cmax == 0:
+                print("Update high_cmax")
+                high_cmax = mid_cmax
+
+                tmax_turn = True
+            # No solution, revert to previous solution
+            else:
+                low_cmax = mid_cmax
+
+        print("Going to restart the loop: ", low_cmax, mid_cmax, high_cmax, round(abs(high_cmax - low_cmax),2))
+    print("Got out of the loop", low_cmax, mid_cmax, high_cmax)
+    
+    # If we reach here, then the element was not present
+    if (status_tmax == 0):
+        if (status_cmax == 0):
+            return 1, x_new, e_new, mid_cmax, mid_tmax
+        else:
+            return 1, x_new, e_new, high_cmax, mid_tmax
+    else:
+        if (status_cmax == 0):
+            return 1, x_new, e_new, mid_cmax, high_tmax
+        else:
+            return 1, x_new, e_new, high_cmax, high_tmax
 
 def get_cost(x, e, c, d):
     tcost = np.sum(x*c)

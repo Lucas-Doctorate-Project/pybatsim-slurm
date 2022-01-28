@@ -58,6 +58,7 @@ class CacheLocality(BatsimScheduler):
 
         self.jobs_completed = []
         self.jobs_waiting = []
+        self.required_containers = []
         self.mapping_job_container = {}
         self.mapping_machine_container = {}
 
@@ -219,6 +220,10 @@ class CacheLocality(BatsimScheduler):
             job_container_size = self.container_description["profiles"][job_container]["size"]
             # Search the best machine available, which means, one with the required container
             download_time_reduction = 0
+
+            if (job_container not in self.required_containers):
+                self.required_containers.append(job_container)           
+           
             machine_candidates, scores_machine_container = self.list_machines_with_container(job_container)
             if (len(machine_candidates) != 0):
                 machine = machine_candidates[0]
@@ -363,7 +368,8 @@ class CacheLocality(BatsimScheduler):
             output_data = {
                 "total_io": self.total_io_mb,
                 "total_container_data_downloaded_mb": self.total_container_downloaded_mb, 
+                "nb_different_required_containers": len(self.required_containers),
                 "nb_container_downloaded": self.nb_container_downloaded,
-                "total_io_data_mb": self.total_io_mb + self.total_container_downloaded_mb
+                "total_io_and_container_data_downloaded": self.total_io_mb + self.total_container_downloaded_mb
             }
             self.save_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)
