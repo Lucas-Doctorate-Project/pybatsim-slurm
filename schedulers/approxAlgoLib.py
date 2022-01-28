@@ -169,7 +169,7 @@ def compute_max_cmax_and_tmax(c, p, b, d, K, M, N):
 
     return cmax, tmax
 
-def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, factor):
+def minimize_cmax_and_tmax_by_factor_new(Cmax, Tmax, M, N, K, c, p, d, b, env, factor):
     """
     Receive all parameters to compute the LP.
     It tries as far as possible to decrease Cmax and Tmax to find a better solution.
@@ -177,7 +177,6 @@ def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, facto
     new_cmax = Cmax - Cmax/factor
     new_tmax = Tmax - Tmax/factor
     """
-    print("New !!!")
     new_tmax = Tmax
     new_cmax = Cmax
     Cmax, Tmax = 0, 0
@@ -186,6 +185,18 @@ def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, facto
     status_new, x_new, e_new = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
 
     while(new_cmax != Cmax or new_tmax != Tmax):
+        # Try to move Tmax
+        status, x, e = status_new, x_new, e_new
+        Tmax = int(new_tmax)
+
+        new_tmax = int(new_tmax - new_tmax/factor)
+        status_new, x_new, e_new = LP(Cmax, new_tmax, M, N, K, c, p, d, b, env)  
+
+        # No solution, revert to previous solution
+        if status_new != 0 :
+            status_new, x_new, e_new == status, x, e
+            new_tmax = int(Tmax)
+        
         # Try to move Cmax
         status, x, e = status_new, x_new, e_new
         Cmax = int(new_cmax)
@@ -198,21 +209,9 @@ def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, facto
             status_new, x_new, e_new == status, x, e
             new_cmax = int(Cmax)
 
-        # Try to move Tmax
-        status, x, e = status_new, x_new, e_new
-        Tmax = int(new_tmax)
-
-        new_tmax = int(new_tmax - new_tmax/factor)
-        status_new, x_new, e_new = LP(Cmax, new_tmax, M, N, K, c, p, d, b, env)  
-
-        # No solution, revert to previous solution
-        if status_new != 0 :
-            status_new, x_new, e_new == status, x, e
-            new_tmax = int(Tmax)
-
     return status, x, e, Cmax, Tmax
 
-def minimize_cmax_and_tmax_by_factor_direct(Cmax, Tmax, M, N, K, c, p, d, b, env, factor):
+def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, factor):
     """
     Receive all parameters to compute the LP.
     It tries as far as possible to decrease Cmax and Tmax to find a better solution.
@@ -224,27 +223,20 @@ def minimize_cmax_and_tmax_by_factor_direct(Cmax, Tmax, M, N, K, c, p, d, b, env
     new_tmax = Tmax - Tmax/factor
     status_new, x_new, e_new = LP(Cmax, new_tmax, M, N, K, c, p, d, b, env)
     while(status_new == 0 and new_tmax > 0):
-        print("Debut boucle new_tmax", new_tmax)
-        print("Trying new Tmax")
         status, x, e = status_new, x_new, e_new
         Tmax = int(new_tmax)
 
         new_tmax = int(new_tmax - new_tmax/factor)   
         status_new, x_new, e_new = LP(Cmax, new_tmax, M, N, K, c, p, d, b, env)
-        print("Fin boucle new_tmax", new_tmax)  
 
     new_cmax = Cmax - Cmax/factor
     status_new, x_new, e_new = LP(new_cmax, Tmax, M, N, K, c, p, d, b, env)
     while(status_new == 0 and new_cmax > 0):
-        print("Debut boucle new_cmax", new_cmax)
-        print("Trying new Cmax")
         status, x, e = status_new, x_new, e_new
         Cmax = int(new_cmax)
 
         new_cmax = int(new_cmax - new_cmax/factor)
         status_new, x_new, e_new = LP(new_cmax, Tmax, M, N, K, c, p, d, b, env)
-        print("Fin boucle Cmax", new_cmax)
-    print("Finished")
     return status, x, e, Cmax, Tmax
 
 def minimize_cmax_and_tmax_by_factor_cmax(Cmax, Tmax, M, N, K, c, p, d, b, env, factor):
@@ -281,11 +273,11 @@ def minimize_cmax_and_tmax_by_factor_cmax(Cmax, Tmax, M, N, K, c, p, d, b, env, 
     else:
         return 1, x_new, e_new, mid_cmax, Tmax
 
-def minimize_cmax_and_tmax_by_factor_binary_search(Cmax, Tmax, M, N, K, c, p, d, b, env, factor):
+def minimize_cmax_and_tmax_by_factor_bs(Cmax, Tmax, M, N, K, c, p, d, b, env, factor):
     # Iterative Binary Search Function
     # It returns index of x in given array arr if present,
     # else returns -1
-    
+    print("Binary search")
     low_cmax = 0
     high_cmax = Cmax
     mid_cmax = 0
@@ -301,16 +293,18 @@ def minimize_cmax_and_tmax_by_factor_binary_search(Cmax, Tmax, M, N, K, c, p, d,
     print("Starting binary search", low_cmax, mid_cmax, high_cmax, abs(high_cmax - low_cmax))
     print("e ai?: ", abs(high_cmax - low_cmax) < 0.001)
     while (
-        (low_cmax <= high_cmax and int(abs(high_cmax - low_cmax)) >= 10) or 
+        (low_cmax <= high_cmax and int(abs(high_cmax - low_cmax)) >= 10) and 
         (low_tmax <= high_tmax and int(abs(high_tmax - low_tmax)) >= 10)):
+
+        if (low_tmax > high_tmax or int(abs(high_tmax - low_tmax)) < 10):
+            tmax_turn = False
+        
+        if (low_cmax > high_cmax or int(abs(high_cmax - low_cmax)) < 10):
+            tmax_turn = True
 
         if(tmax_turn):
             mid_tmax = round((high_tmax + low_tmax) / 2,2)
-
-            if(status_cmax == 0):
-                status_tmax, x_new, e_new = LP(mid_cmax, mid_tmax, M, N, K, c, p, d, b, env)
-            else:
-                status_tmax, x_new, e_new = LP(high_cmax, mid_tmax, M, N, K, c, p, d, b, env)
+            status_tmax, x_new, e_new = LP(high_cmax, mid_tmax, M, N, K, c, p, d, b, env)
             
             # If x is greater, ignore left half
             if status_tmax == 0:
@@ -325,14 +319,8 @@ def minimize_cmax_and_tmax_by_factor_binary_search(Cmax, Tmax, M, N, K, c, p, d,
                    
         else:
             mid_cmax = round((high_cmax + low_cmax) / 2,2)
+            status_cmax, x_new, e_new = LP(mid_cmax, high_tmax, M, N, K, c, p, d, b, env)
 
-            if(status_tmax == 0):
-                status_cmax, x_new, e_new = LP(mid_cmax, mid_tmax, M, N, K, c, p, d, b, env)
-            else:
-                status_cmax, x_new, e_new = LP(mid_cmax, high_tmax, M, N, K, c, p, d, b, env)
-
-            status_cmax, x_new, e_new = LP(mid_cmax, Tmax, M, N, K, c, p, d, b, env)
-            
             # If x is greater, ignore left half
             if status_cmax == 0:
                 print("Update high_cmax")
@@ -347,16 +335,7 @@ def minimize_cmax_and_tmax_by_factor_binary_search(Cmax, Tmax, M, N, K, c, p, d,
     print("Got out of the loop", low_cmax, mid_cmax, high_cmax)
     
     # If we reach here, then the element was not present
-    if (status_tmax == 0):
-        if (status_cmax == 0):
-            return 1, x_new, e_new, mid_cmax, mid_tmax
-        else:
-            return 1, x_new, e_new, high_cmax, mid_tmax
-    else:
-        if (status_cmax == 0):
-            return 1, x_new, e_new, mid_cmax, high_tmax
-        else:
-            return 1, x_new, e_new, high_cmax, high_tmax
+    return 0, x_new, e_new, high_cmax, high_tmax
 
 def get_cost(x, e, c, d):
     tcost = np.sum(x*c)
