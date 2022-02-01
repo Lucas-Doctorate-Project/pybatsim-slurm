@@ -10,6 +10,7 @@ import io
 import json
 import logging
 import sys
+import textwrap
 import time
 
 from pybatsim import __version__
@@ -88,6 +89,15 @@ class _JsonStoreAction(argparse.Action):
 def _build_parser():
     parser = argparse.ArgumentParser(
         description='Run a PyBatsim scheduler.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent('''\
+            exit status:
+              %(prog)s can exit with the following return codes:
+                0  success
+                1  simulation failure
+                2  argument parsing error
+        '''
+        )
     )
     parser.add_argument(
         '--version',
@@ -134,17 +144,16 @@ def _build_parser():
     return parser
 
 
-def _abort_on_ambiguous_scheduler_name(name):
+def _abort_on_ambiguous_scheduler_name(name, *, parser):
     ambiguous_names = find_ambiguous_scheduler_names()
     if name in ambiguous_names:
-        print(
-            f'Error in definition of \'{SCHEDULER_ENTRY_POINT}\' entry point,',
-            'check your packaging!',
-            f'\'{name}\' is defined more than once, and binds to:',
-            ', '.join(ambiguous_names[name]),
-            file=sys.stderr,
+        errmsg = (
+            f'overlapping bindings in \'{SCHEDULER_ENTRY_POINT}\' entry point, '
+            'check your packaging! '
+            f'\'{name}\' is defined more than once, and binds to: '
         )
-        sys.exit(1)
+        errmsg += ', '.join(ambiguous_names[name])
+        parser.error(errmsg)
 
 
 def run_simulation(scheduler, *, socket_endpoint, event_socket_endpoint, timeout):
@@ -183,12 +192,19 @@ def run_simulation(scheduler, *, socket_endpoint, event_socket_endpoint, timeout
 
 def main(args=None):
     logging.basicConfig(level=logging.INFO)
+
+    # retrieve arguments
     parser = _build_parser()
     arguments = parser.parse_args(args)
     logging.debug(f'parsed arguments: {vars(arguments)}')
+
     # instantiate scheduler
-    _abort_on_ambiguous_scheduler_name(arguments.scheduler)
-    scheduler = get_scheduler_by_name(arguments.scheduler, options=arguments.scheduler_options)
+    _abort_on_ambiguous_scheduler_name(arguments.scheduler, parser=parser)
+    try:
+        scheduler = get_scheduler_by_name(arguments.scheduler, options=arguments.scheduler_options)
+    except ValueError:
+        parser.error(f'unknown scheduler \'{arguments.scheduler}\'')
+
     # launch simulation
     run_simulation(
         scheduler=scheduler,
