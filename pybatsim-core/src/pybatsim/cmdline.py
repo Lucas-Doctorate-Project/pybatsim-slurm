@@ -137,6 +137,8 @@ def _build_parser():
     )
     parser.add_argument(
         'scheduler',
+        choices=sorted(set(name for name, _ in find_plugin_schedulers())),
+        metavar='scheduler',
         help='name of the scheduler to run '
              f'(as registered under \'{SCHEDULER_ENTRY_POINT}\' entry point)',
     )
@@ -200,10 +202,7 @@ def main(args=None):
 
     # instantiate scheduler
     _abort_on_ambiguous_scheduler_name(arguments.scheduler, parser=parser)
-    try:
-        scheduler = get_scheduler_by_name(arguments.scheduler, options=arguments.scheduler_options)
-    except ValueError:
-        parser.error(f'unknown scheduler \'{arguments.scheduler}\'')
+    scheduler = get_scheduler_by_name(arguments.scheduler, options=arguments.scheduler_options)
 
     # launch simulation
     run_simulation(
