@@ -47,6 +47,7 @@ class CacheLocality(BatsimScheduler):
         self.nb_jobs = 0
         self.nb_container_downloaded = 0
         self.total_container_downloaded_mb = 0
+        self.total_container_downloaded_mb_expected = 0
         self.total_io_mb = 0
 
         self.notify_already_sent = False
@@ -107,7 +108,6 @@ class CacheLocality(BatsimScheduler):
         """
         Get the layers of a job_cotainer and return as a list.
         """
-
         list_of_layers = self.container_description.get("profiles").get(job_container).get("layers")
         if(list_of_layers != None):
             return list_of_layers
@@ -119,7 +119,7 @@ class CacheLocality(BatsimScheduler):
         Get the layers of a job_cotainer and return as a list.
         """
 
-        total_download_size = self.container_description.get("profiles").get(job_container).get("layers_total_download_size")
+        total_download_size = self.container_description.get("profiles").get(job_container).get("size")
         if(total_download_size != None):
             return total_download_size
         else:
@@ -129,7 +129,7 @@ class CacheLocality(BatsimScheduler):
         """
         List machines that already have job_container
         """
-        
+
         machine_candidates = []
         scores_machine_container = {}
         if(len(self.availableResources) == 0):
@@ -218,16 +218,21 @@ class CacheLocality(BatsimScheduler):
             job_io_size = job.profile_dict["io"]
             job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
             job_container_size = self.container_description["profiles"][job_container]["size"]
+            
+            print("Original size here", job_container_size)
             # Search the best machine available, which means, one with the required container
-            download_time_reduction = 0
+            download_reduction = 0
 
             if (job_container not in self.required_containers):
                 self.required_containers.append(job_container)           
-           
-            machine_candidates, scores_machine_container = self.list_machines_with_container(job_container)
+            
+            check_layers = True
+            machine_candidates, scores_machine_container = self.list_machines_with_container(job_container, check_layers)
+            #print("Scores: ", scores_machine_container)
             if (len(machine_candidates) != 0):
                 machine = machine_candidates[0]
-                download_time_reduction = scores_machine_container[machine]
+                download_reduction = scores_machine_container[machine]
+                print("download_reduction: ", download_reduction)
                 machine = ProcSet((machine,machine)) # Convert the machine id to a ProcSet
             else:
                 if(len(self.availableResources) != 0):
@@ -238,30 +243,39 @@ class CacheLocality(BatsimScheduler):
             # If the container is not on the machine, download it there, before scheduling the job
             if (job_container != None and 
                 job_container not in self.mapping_machine_container[int(str(machine))]):
-                """
+                print("Job container: ", job_container)
+                self.total_container_downloaded_mb_expected += job_container_size
                 new_profile_name = job_container
-
+                new_size = job_container_size
                 # If there are usefull layers in the allocated machine, create a new profile for such job, with a new delay
-                if (download_time_reduction != 0):
-                    new_profile_name = job_container + '_reduced_' + str(round(download_time_reduction, 2))
+                if (download_reduction != 0):
+                    new_profile_name = job_container + '_reduced_' + str(round(download_reduction, 2))
                     new_profile = {}
                     if new_profile_name not in self.container_description["profiles"].keys():
                         new_profile[new_profile_name] = self.container_description["profiles"].get(job_container)
-                        new_delay = round(float(new_profile[new_profile_name]["delay"]) * download_time_reduction, 2)
-                        new_profile[new_profile_name]["delay"] -= new_delay
+                        
+                        new_computation_required = round(new_profile[new_profile_name]["cpu"] - (new_profile[new_profile_name]["cpu"] * download_reduction), 2)
+                        print("new_computation_required: ", new_computation_required, new_profile[new_profile_name]["cpu"])
+                        new_profile[new_profile_name]["cpu"] = new_computation_required
+                        
+                        new_size = round(new_profile[new_profile_name]["size"] - (new_profile[new_profile_name]["size"] * download_reduction), 2)
+                        print("new_size: ", new_size, new_profile[new_profile_name]["size"])
+                        new_profile[new_profile_name]["size"] = new_size
+                        
                         self.container_description["profiles"][new_profile_name] = new_profile
                         self.bs.register_profiles("w0", new_profile)
-                """
+
                 # Create a dynamic job
                 new_job = self.bs.register_job(
-                        job.workload + '!' + job_container + "_job" + str(job.id.split("!")[1]) + "_" + str(self.nb_container_downloaded),
-                        1, 
-                        18000,
-                        job_container, 
-                        subtime=None)
+                    job.workload + '!' + job_container + "_job" + str(job.id.split("!")[1]) + "_" + str(self.nb_container_downloaded),
+                    1, 
+                    18000,
+                    new_profile_name, 
+                    subtime=None)
                 
                 self.container_jobs_scheduled.append(new_job)
-                self.total_container_downloaded_mb += job_container_size
+                print("There is new size here", new_size)
+                self.total_container_downloaded_mb += new_size
 
                 # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
                 new_job.allocation = machine
@@ -273,6 +287,10 @@ class CacheLocality(BatsimScheduler):
                 
                 self.nb_jobs += 2
                 self.nb_container_downloaded += 1
+
+                # Add the container in the machine
+                # for availableResource in self.availableResources:
+                self.mapping_machine_container[int(str(machine))].append(job_container)
             
             # Or the container is already in the machine, or the job does not require a container, 
             # so the job can be scheduled
@@ -367,6 +385,7 @@ class CacheLocality(BatsimScheduler):
 
             output_data = {
                 "total_io": self.total_io_mb,
+                "total_container_data_downloaded_mb_expected": self.total_container_downloaded_mb_expected,
                 "total_container_data_downloaded_mb": self.total_container_downloaded_mb, 
                 "nb_different_required_containers": len(self.required_containers),
                 "nb_container_downloaded": self.nb_container_downloaded,
