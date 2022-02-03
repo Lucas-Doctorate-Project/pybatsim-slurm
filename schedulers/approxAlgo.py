@@ -16,12 +16,12 @@ class ApproxAlgo(BatsimScheduler):
 
     def __init__(self, options):
         super().__init__(options)
-
+        
         # Verify if the input_path was provided
         assert "container_description_path" in options, "The path to the input files should be given as a CLI option as follows: [pybatsim command] -o \'{\"input_path\":\"path/to/input/files\"}\'"
         if not os.path.exists(options["container_description_path"]):
                 assert False, "Could not find input path {}".format(options["container_description_path"])
-
+                
         if "download_info_csv_path" in options:
             self.download_info_csv_path = options["download_info_csv_path"]
         else:
@@ -87,6 +87,9 @@ class ApproxAlgo(BatsimScheduler):
         self.container_jobs_scheduled = []
         self.container_jobs_executed = []
         self.original_jobs_scheduled = []
+
+        self.list_of_valid_cost = []
+        self.list_of_valid_makespan = []
 
 
 # ----------------------------- ApproxAlgo -----------------------------------------
@@ -241,10 +244,12 @@ class ApproxAlgo(BatsimScheduler):
         # Try to optimize the solution and update the safe results only if there is an optimization available.
         optimization_factor = self.approx_algo_optimization_factor
         if (optimization_factor != 0):
-            status_new, x_new, e_new, new_cmax, new_tmax = minimize_cmax_and_tmax_by_factor(Cmax, Tmax, M, N, K, c, p, d, b, env, optimization_factor)
+            status_new, x_new, e_new, new_cmax, new_tmax, list_of_valid_cmax, list_of_valid_tmax = minimize_cmax_and_tmax_by_factor(Cmax, Tmax, x_basis, e_basis, M, N, K, c, p, d, b, env, optimization_factor)
             if (status_new == 0):
                 status, x, e = status_new, x_new, e_new
                 Cmax, Tmax = new_cmax, new_tmax
+                self.list_of_valid_cost = list_of_valid_cmax
+                self.list_of_valid_makespan = list_of_valid_tmax
 
         print("Input matrixes: ")
         print("c:")
@@ -616,6 +621,11 @@ class ApproxAlgo(BatsimScheduler):
                 "nb_different_required_containers": len(self.required_containers),
                 "nb_container_downloaded": self.nb_container_downloaded,
                 "total_io_and_container_data_downloaded": self.total_io_mb + self.total_container_downloaded_mb
-                
             }
-            self.save_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)            
+            self.save_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)
+            
+            output_data = {
+                "valid_cost": self.list_of_valid_cost,
+                "valid_makespan": self.list_of_valid_makespan
+            }
+            self.save_output_as_csv(self.download_info_csv_path + "out_valid_solutions.csv", output_data)          
