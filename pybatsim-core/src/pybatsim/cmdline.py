@@ -6,6 +6,8 @@
 """
 
 import argparse
+import collections
+import inspect
 import io
 import json
 import logging
@@ -86,6 +88,32 @@ class _JsonStoreAction(argparse.Action):
             ) from None
 
 
+class _ListSchedulersAction(argparse.Action):
+    def __init__(
+        self,
+        option_strings,
+        dest=argparse.SUPPRESS,
+        default=argparse.SUPPRESS,
+        help='list known schedulers and exit'  # pylint: disable=redefined-builtin
+    ):
+        super().__init__(option_strings, dest, default=default, nargs=0, help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        # organize names by actual scheduler class (some names can be aliases)
+        known_schedulers_by_class = collections.defaultdict(list)
+        for name, cls in find_plugin_schedulers():
+            known_schedulers_by_class[cls].append(name)
+        # display names of scheduler in alphabetical order
+        for names in known_schedulers_by_class.values():
+            names.sort()
+        for cls, names in known_schedulers_by_class.items():
+            doc = inspect.getdoc(cls)
+            doc = doc.splitlines()[0] if doc is not None else cls.__qualname__
+            print(', '.join(names) + ':')
+            print('  ' + doc)
+        parser.exit()
+
+
 def _build_parser():
     parser = argparse.ArgumentParser(
         description='Run a PyBatsim scheduler.',
@@ -103,6 +131,10 @@ def _build_parser():
         '--version',
         action='version',
         version=__version__,
+    )
+    parser.add_argument(
+        '--list-schedulers',
+        action=_ListSchedulersAction,
     )
     parser.add_argument(
         '-t', '--timeout',
