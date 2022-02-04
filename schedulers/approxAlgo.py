@@ -18,9 +18,10 @@ class ApproxAlgo(BatsimScheduler):
         super().__init__(options)
         
         # Verify if the input_path was provided
-        assert "container_description_path" in options, "The path to the input files should be given as a CLI option as follows: [pybatsim command] -o \'{\"input_path\":\"path/to/input/files\"}\'"
-        if not os.path.exists(options["container_description_path"]):
-                assert False, "Could not find input path {}".format(options["container_description_path"])
+        #assert "container_description_path" in options, "The path to the input files should be given as a CLI option as follows: [pybatsim command] -o \'{\"input_path\":\"path/to/input/files\"}\'"
+        #if not os.path.exists(options["container_description_path"]):
+        if "container_description_path" not in options:
+            assert False, "Could not find input path {}".format(options)#["container_description_path"])
                 
         if "download_info_csv_path" in options:
             self.download_info_csv_path = options["download_info_csv_path"]
@@ -294,7 +295,7 @@ class ApproxAlgo(BatsimScheduler):
         return allocation_dict
 
 # ----------------------------- ApproxAlgo -----------------------------------------
-    def save_output_as_csv(self, file_name, json_data):
+    def save_json_output_as_csv(self, file_name, json_data):
         header = []
         data = []    
 
@@ -305,7 +306,6 @@ class ApproxAlgo(BatsimScheduler):
         with open(file_name, 'w', encoding='UTF8') as f:
             writer = csv.writer(f)
             writer.writerow(header)
-            writer.writerow(data)
 
         return
         
@@ -622,10 +622,14 @@ class ApproxAlgo(BatsimScheduler):
                 "nb_container_downloaded": self.nb_container_downloaded,
                 "total_io_and_container_data_downloaded": self.total_io_mb + self.total_container_downloaded_mb
             }
-            self.save_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)
-            
-            output_data = {
-                "valid_cost": self.list_of_valid_cost,
-                "valid_makespan": self.list_of_valid_makespan
-            }
-            self.save_output_as_csv(self.download_info_csv_path + "out_valid_solutions.csv", output_data)          
+            self.save_json_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)
+
+            print(self.list_of_valid_cost, self.list_of_valid_makespan)
+            header = ["valid_cost", "valid_makespan"]
+            with open(self.download_info_csv_path + "out_valid_solutions.csv", 'w', encoding='UTF8') as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                for i in range(0, len(self.list_of_valid_cost)):
+                    row = [self.list_of_valid_cost[i], self.list_of_valid_makespan[i]]
+                    writer.writerow(row)
+                
