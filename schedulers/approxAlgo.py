@@ -57,6 +57,7 @@ class ApproxAlgo(BatsimScheduler):
         self.nb_container_downloaded = 0
         self.total_io_mb = 0
         self.total_container_downloaded_mb = 0
+        self.total_container_downloaded_mb_expected = 0
 
         self.notify_already_sent = False
         self.end_of_simulation_asked = False
@@ -336,13 +337,13 @@ class ApproxAlgo(BatsimScheduler):
         Get the layers of a job_cotainer and return as a list.
         """
 
-        total_download_size = self.container_description.get("profiles").get(job_container).get("layers_total_download_size")
+        total_download_size = self.container_description.get("profiles").get(job_container).get("size")
         if(total_download_size != None):
             return total_download_size
         else:
             return -1
 
-    def list_machines_with_container(self, job_container):
+    def list_machines_with_container(self, job_container, check_layers=False):
         """
         List machines that already have job_container
         """
@@ -350,39 +351,41 @@ class ApproxAlgo(BatsimScheduler):
         list_of_layers = self.get_layers_from_container(job_container)
         machine_candidates = []
         scores_machine_container = {}
-        if(len(self.availableResources) == 0):
-            return [], {}
-        else:
-            # Let's check if any machine available has the job_container
-            # or other container with common layers
-            for machine in self.availableResources:
-                machine_id = int(str(machine))
-                scores_machine_container[machine_id] = 0
-                containers_in_machine = self.mapping_machine_container[machine_id]
-                # It has the job_container
-                if (job_container in containers_in_machine):
-                    scores_machine_container[machine_id] = 1 #self.get_layers_total_download_size_from_container(job_container)
-                    machine_candidates.append(machine)
+        #if(len(self.availableResources) == 0):
+        #    return [], {}
+        #else:
+        # Let's check if any machine available has the job_container
+        # or other container with common layers
+        print("self.bs.machines['compute']", self.bs.machines["compute"])
+        for machine in list(self.bs.machines["compute"][0].keys()): #self.availableResources:
+            print(machine)
+            machine_id = machine["id"]#int(str(machine))
+            scores_machine_container[machine_id] = 0
+            containers_in_machine = self.mapping_machine_container[machine_id]
+            # It has the job_container
+            if (job_container in containers_in_machine):
+                scores_machine_container[machine_id] = 1 #self.get_layers_total_download_size_from_container(job_container)
+                machine_candidates.append(machine)
 
-                # Check other container layers, and compute the percetage of matching
-                else:
-                    for container in containers_in_machine:
-                        list_of_layers_of_second_container = self.get_layers_from_container(container)
-                        for layer in list_of_layers:
-                            if layer in list_of_layers_of_second_container:
-                                scores_machine_container[machine_id] += list_of_layers_of_second_container.get(layer)
-                        
-                    layers_total_download_size = self.get_layers_total_download_size_from_container(job_container)
-                    if(scores_machine_container[machine_id] != 0 and layers_total_download_size != -1):
-                        scores_machine_container[machine_id] /= layers_total_download_size
+            # Check other container layers, and compute the percetage of matching
+            else:
+                for container in containers_in_machine:
+                    list_of_layers_of_second_container = self.get_layers_from_container(container)
+                    for layer in list_of_layers:
+                        if layer in list_of_layers_of_second_container:
+                            scores_machine_container[machine_id] += list_of_layers_of_second_container.get(layer)
                     
-                    # If there is any problem with the container definition, some missing size in the .json file, for example, consider such container as invalid, so size 0
-                    else:
-                        scores_machine_container[machine_id] = 0
+                layers_total_download_size = self.get_layers_total_download_size_from_container(job_container)
+                if(scores_machine_container[machine_id] != 0 and layers_total_download_size != -1):
+                    scores_machine_container[machine_id] /= layers_total_download_size
+                
+                # If there is any problem with the container definition, some missing size in the .json file, for example, consider such container as invalid, so size 0
+                else:
+                    scores_machine_container[machine_id] = 0
 
-                machine_candidates = sorted(scores_machine_container, key=scores_machine_container.get, reverse=True)
-            
-            return machine_candidates, scores_machine_container
+            machine_candidates = sorted(scores_machine_container, key=scores_machine_container.get, reverse=True)
+        
+        return machine_candidates, scores_machine_container
 
     def get_earliest_submitted_job(self):
         selected_job = None
@@ -472,39 +475,64 @@ class ApproxAlgo(BatsimScheduler):
                     job_io_size = job.profile_dict["io"]
                     job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
                     job_container_size = self.container_description["profiles"][job_container]["size"]
-                    #download_time_reduction = 0
+                    print("Original size here", job_container_size)
+
+                    # Search the best machine available, which means, one with the required container
+                    download_reduction = 0
 
                     if (job_container not in self.required_containers):
                         self.required_containers.append(job_container)
+
+                    check_layers = True
+                    machine_candidates, scores_machine_container = self.list_machines_with_container(job_container, check_layers)
+                    print("Macchines candidates: ", machine_candidates)
+                    print("machine_id: ", machine_id)
+                    if (machine_id in machine_candidates):
+                        print("Entrou")
+                        #machine = machine_candidates[machine_id]
+                        machine = machine_id
+                        download_reduction = scores_machine_container[machine]
+                        print("download_reduction: ", download_reduction)
+                        #machine = ProcSet((machine,machine)) # Convert the machine id to a ProcSet
+                        print("Machine: ", machine)
+                    else:
+                        break
 
                     machine = ProcSet((machine_id,machine_id)) # Convert the machine id to a ProcSet
                     # If the container is not on the machine, download it there, before scheduling the job
                     if (job_container != None and 
                         job_container not in self.mapping_machine_container[int(str(machine))]):
-                        """
-                        new_profile_name = job_container
+                        self.total_container_downloaded_mb_expected += job_container_size
 
+                        new_profile_name = job_container
+                        new_size = job_container_size
                         # If there are usefull layers in the allocated machine, create a new profile for such job, with a new delay
-                        if (download_time_reduction != 0):
-                            new_profile_name = job_container + '_reduced_' + str(round(download_time_reduction, 2))
+                        if (download_reduction != 0):
+                            new_profile_name = job_container + '_reduced_' + str(round(download_reduction, 2))
                             new_profile = {}
                             if new_profile_name not in self.container_description["profiles"].keys():
                                 new_profile[new_profile_name] = self.container_description["profiles"].get(job_container)
-                                new_delay = round(float(new_profile[new_profile_name]["delay"]) * download_time_reduction, 2)
-                                new_profile[new_profile_name]["delay"] -= new_delay
+                                new_computation_required = round(new_profile[new_profile_name]["cpu"] - (new_profile[new_profile_name]["cpu"] * download_reduction), 2)
+                                print("new_computation_required: ", new_computation_required, new_profile[new_profile_name]["cpu"])
+                                new_profile[new_profile_name]["cpu"] = new_computation_required
+                                
+                                new_size = round(new_profile[new_profile_name]["size"] - (new_profile[new_profile_name]["size"] * download_reduction), 2)
+                                print("new_size: ", new_size, new_profile[new_profile_name]["size"])
+                                new_profile[new_profile_name]["size"] = new_size
+                                
                                 self.container_description["profiles"][new_profile_name] = new_profile
                                 self.bs.register_profiles("w0", new_profile)
-                        """
+
                         # Create a dynamic job
                         new_job = self.bs.register_job(
                                 job.workload + '!' + job_container + "_job" + str(job.id.split("!")[1]) + "_" + str(self.nb_container_downloaded),
                                 1, 
                                 2000,
-                                job_container, 
+                                new_profile_name, 
                                 subtime=None)
                     
                         self.container_jobs_scheduled.append(new_job)
-                        self.total_container_downloaded_mb += job_container_size
+                        self.total_container_downloaded_mb += new_size
                         
                         # Allocate the new job to the machine reserved, and add it in the scheduledJobs list
                         new_job.allocation = machine
@@ -617,12 +645,13 @@ class ApproxAlgo(BatsimScheduler):
 
             output_data = {
                 "total_io": self.total_io_mb,
+                "total_container_data_downloaded_mb_expected": self.total_container_downloaded_mb_expected,
                 "total_container_data_downloaded_mb": self.total_container_downloaded_mb, 
                 "nb_different_required_containers": len(self.required_containers),
                 "nb_container_downloaded": self.nb_container_downloaded,
                 "total_io_and_container_data_downloaded": self.total_io_mb + self.total_container_downloaded_mb
             }
-            self.save_json_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)
+            self.save_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)
 
             print(self.list_of_valid_cost, self.list_of_valid_makespan)
             header = ["valid_cost", "valid_makespan"]
@@ -632,4 +661,3 @@ class ApproxAlgo(BatsimScheduler):
                 for i in range(0, len(self.list_of_valid_cost)):
                     row = [self.list_of_valid_cost[i], self.list_of_valid_makespan[i]]
                     writer.writerow(row)
-                
