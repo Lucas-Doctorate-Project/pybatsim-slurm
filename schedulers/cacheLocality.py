@@ -17,9 +17,10 @@ class CacheLocality(BatsimScheduler):
         super().__init__(options)
 
         # Verify if the input_path was provided
-        assert "container_description_path" in options, "The path to the input files should be given as a CLI option as follows: [pybatsim command] -o \'{\"input_path\":\"path/to/input/files\"}\'"
-        if not os.path.exists(options["container_description_path"]):
-                assert False, "Could not find input path {}".format(options["container_description_path"])
+        #assert "container_description_path" in options, "The path to the input files should be given as a CLI option as follows: [pybatsim command] -o \'{\"input_path\":\"path/to/input/files\"}\'"
+        #if not os.path.exists(options["container_description_path"]):
+        if "container_description_path" not in options:
+           assert False, "Could not find input path {}".format(options["container_description_path"])
                 
         if "download_info_csv_path" in options:
             self.download_info_csv_path = options["download_info_csv_path"]
@@ -209,6 +210,7 @@ class CacheLocality(BatsimScheduler):
         The decion process. It will check if the machines have containers required by the jobs.
         If not, dybamic jobs will be created, and these jobs will represent the downloading of containers.
         """
+
         while(len(self.openJobs) != self.workload_size):
             break
         scheduledJobs = []
@@ -219,7 +221,6 @@ class CacheLocality(BatsimScheduler):
             job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
             job_container_size = self.container_description["profiles"][job_container]["size"]
             
-            print("Original size here", job_container_size)
             # Search the best machine available, which means, one with the required container
             download_reduction = 0
 
@@ -228,7 +229,6 @@ class CacheLocality(BatsimScheduler):
             
             check_layers = True
             machine_candidates, scores_machine_container = self.list_machines_with_container(job_container, check_layers)
-            #print("Scores: ", scores_machine_container)
             if (len(machine_candidates) != 0):
                 machine = machine_candidates[0]
                 download_reduction = scores_machine_container[machine]
