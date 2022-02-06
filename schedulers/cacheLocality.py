@@ -75,15 +75,12 @@ class CacheLocality(BatsimScheduler):
         self.original_jobs_scheduled = []
 
     def save_output_as_csv(self, file_name, json_data):
-        print("Saving output")
         header = []
         data = []    
 
         for key,value in json_data.items():
             header.append(key)
             data.append(value)
-
-        print(header, data)
 
         with open(file_name, 'w', encoding='UTF8') as f:
             writer = csv.writer(f)
@@ -232,7 +229,6 @@ class CacheLocality(BatsimScheduler):
             if (len(machine_candidates) != 0):
                 machine = machine_candidates[0]
                 download_reduction = scores_machine_container[machine]
-                print("download_reduction: ", download_reduction)
                 machine = ProcSet((machine,machine)) # Convert the machine id to a ProcSet
             else:
                 if(len(self.availableResources) != 0):
@@ -243,7 +239,6 @@ class CacheLocality(BatsimScheduler):
             # If the container is not on the machine, download it there, before scheduling the job
             if (job_container != None and 
                 job_container not in self.mapping_machine_container[int(str(machine))]):
-                print("Job container: ", job_container)
                 self.total_container_downloaded_mb_expected += job_container_size
                 new_profile_name = job_container
                 new_size = job_container_size
@@ -255,11 +250,9 @@ class CacheLocality(BatsimScheduler):
                         new_profile[new_profile_name] = self.container_description["profiles"].get(job_container)
                         
                         new_computation_required = round(new_profile[new_profile_name]["cpu"] - (new_profile[new_profile_name]["cpu"] * download_reduction), 2)
-                        print("new_computation_required: ", new_computation_required, new_profile[new_profile_name]["cpu"])
                         new_profile[new_profile_name]["cpu"] = new_computation_required
                         
                         new_size = round(new_profile[new_profile_name]["size"] - (new_profile[new_profile_name]["size"] * download_reduction), 2)
-                        print("new_size: ", new_size, new_profile[new_profile_name]["size"])
                         new_profile[new_profile_name]["size"] = new_size
                         
                         self.container_description["profiles"][new_profile_name] = new_profile
@@ -274,7 +267,6 @@ class CacheLocality(BatsimScheduler):
                     subtime=None)
                 
                 self.container_jobs_scheduled.append(new_job)
-                print("There is new size here", new_size)
                 self.total_container_downloaded_mb += new_size
 
                 # Allocate the new job to the machine reserved, and add it in the scheduledJobs list

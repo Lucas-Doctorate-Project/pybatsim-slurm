@@ -69,6 +69,7 @@ class ApproxAlgo(BatsimScheduler):
         self.jobs_completed = []
         self.jobs_waiting = []
         self.required_containers = []
+        self.list_of_machines = []
         self.machines_description = {}
         self.mapping_job_container = {}
         self.mapping_machine_container = {}
@@ -215,8 +216,6 @@ class ApproxAlgo(BatsimScheduler):
             job_container_in_mapping_id = self.mapping_container_id.get(job_container)
             list_of_containers.append(job_container_in_mapping_id)
 
-        print("Preparou tudo!")
-
         return job_id, machine_id, container_id,  list_of_functions_execution_time, list_of_functions_cost, list_of_containers_execution_time, list_of_containers_cost, list_of_containers
 
     """
@@ -351,15 +350,11 @@ class ApproxAlgo(BatsimScheduler):
         list_of_layers = self.get_layers_from_container(job_container)
         machine_candidates = []
         scores_machine_container = {}
-        #if(len(self.availableResources) == 0):
-        #    return [], {}
-        #else:
+
         # Let's check if any machine available has the job_container
         # or other container with common layers
-        print("self.bs.machines['compute']", self.bs.machines["compute"])
-        for machine in list(self.bs.machines["compute"][0].keys()): #self.availableResources:
-            print(machine)
-            machine_id = machine["id"]#int(str(machine))
+        for machine in self.list_of_machines: #self.availableResources:
+            machine_id = int(str(machine))
             scores_machine_container[machine_id] = 0
             containers_in_machine = self.mapping_machine_container[machine_id]
             # It has the job_container
@@ -401,6 +396,26 @@ class ApproxAlgo(BatsimScheduler):
             self.machines_description[machine["id"]] = machine["properties"]["speed"]
         print(self.machines_description)
 
+    def get_machines(self, machines_resource_description):
+        for machine in machines_resource_description:
+            self.list_of_machines.append(machine["id"])
+
+    def save_output_as_csv(self, file_name, json_data):
+        header = []
+        data = []    
+
+        for key,value in json_data.items():
+            header.append(key)
+            data.append(value)
+
+        with open(file_name, 'w', encoding='UTF8') as f:
+            writer = csv.writer(f)
+            # write the header
+            writer.writerow(header)
+            # write the data
+            writer.writerow(data)
+        return
+
     def onSimulationBegins(self):
         """
         Verify if the correct flags has been set when the simulation begins
@@ -419,13 +434,13 @@ class ApproxAlgo(BatsimScheduler):
         """
         Update the set of Jobs and Resources after the simulation begins
         """
-        print("Inited")
         self.openJobs = set()
         self.availableResources = ProcSet((0,self.bs.nb_compute_resources-1))
         for availableResource in self.availableResources:
             self.mapping_machine_container[availableResource] = []
             self.mapping_jobs_waiting_machines[availableResource] = []
         self.get_machines_and_speed(self.bs.machines["compute"])
+        self.get_machines(self.bs.machines["compute"])
 
     def onBeforeEvents(self):
         """
@@ -475,26 +490,18 @@ class ApproxAlgo(BatsimScheduler):
                     job_io_size = job.profile_dict["io"]
                     job_container = job.profile_dict['container']['image'] + "_"  + job.profile_dict['container']['tag']
                     job_container_size = self.container_description["profiles"][job_container]["size"]
-                    print("Original size here", job_container_size)
 
                     # Search the best machine available, which means, one with the required container
                     download_reduction = 0
 
                     if (job_container not in self.required_containers):
                         self.required_containers.append(job_container)
-
+                    
                     check_layers = True
                     machine_candidates, scores_machine_container = self.list_machines_with_container(job_container, check_layers)
-                    print("Macchines candidates: ", machine_candidates)
-                    print("machine_id: ", machine_id)
                     if (machine_id in machine_candidates):
-                        print("Entrou")
-                        #machine = machine_candidates[machine_id]
                         machine = machine_id
                         download_reduction = scores_machine_container[machine]
-                        print("download_reduction: ", download_reduction)
-                        #machine = ProcSet((machine,machine)) # Convert the machine id to a ProcSet
-                        print("Machine: ", machine)
                     else:
                         break
 
@@ -513,11 +520,9 @@ class ApproxAlgo(BatsimScheduler):
                             if new_profile_name not in self.container_description["profiles"].keys():
                                 new_profile[new_profile_name] = self.container_description["profiles"].get(job_container)
                                 new_computation_required = round(new_profile[new_profile_name]["cpu"] - (new_profile[new_profile_name]["cpu"] * download_reduction), 2)
-                                print("new_computation_required: ", new_computation_required, new_profile[new_profile_name]["cpu"])
                                 new_profile[new_profile_name]["cpu"] = new_computation_required
                                 
                                 new_size = round(new_profile[new_profile_name]["size"] - (new_profile[new_profile_name]["size"] * download_reduction), 2)
-                                print("new_size: ", new_size, new_profile[new_profile_name]["size"])
                                 new_profile[new_profile_name]["size"] = new_size
                                 
                                 self.container_description["profiles"][new_profile_name] = new_profile
@@ -653,7 +658,6 @@ class ApproxAlgo(BatsimScheduler):
             }
             self.save_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)
 
-            print(self.list_of_valid_cost, self.list_of_valid_makespan)
             header = ["valid_cost", "valid_makespan"]
             with open(self.download_info_csv_path + "out_valid_solutions.csv", 'w', encoding='UTF8') as f:
                 writer = csv.writer(f)
