@@ -285,7 +285,7 @@ def get_solution_makespan(x, e, M, N, K, c, p, d, b):
 
     return int(max([np.sum(x_time[m]) + np.sum(e_time[m]) for m in range(M)]))
 
-def find_Tmin(Cmax, Tmax, M, N, K, c, p, d, b, env, factor):
+def find_Tmin(Cmax, Tmax, M, N, K, c, p, d, b, env):#, factor):
 
     low_tmax = 0
     high_tmax = Tmax
@@ -311,7 +311,8 @@ def find_Tmin(Cmax, Tmax, M, N, K, c, p, d, b, env, factor):
     
     return high_tmax
 
-def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, x, e, M, N, K, c, p, d, b, env, factor):
+#def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, x, e, M, N, K, c, p, d, b, env):#, factor):
+def minimize_cmax_and_tmax(Cmax, Tmax, M, N, K, c, p, d, b, env):#, factor):
     # Initialization
     low_tmax = 0
     high_tmax = Tmax
@@ -322,24 +323,42 @@ def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, x, e, M, N, K, c, p, d, b, env,
     new_makespan = Tmax
     
     list_of_solution = []
+    list_of_cmax_used = []
+    list_of_tmax_used = []
+
+    list_of_cmax_lp = []
+    list_of_tmax_lp = []
+
     list_of_valid_cmax = []
     list_of_valid_tmax = []
 
     # Compute intial solution with the initial Cmax and Tmax
-    status_valid, x_valid, e_valid = 0, x, e
+    
+    #status_valid, x_valid, e_valid = 0, x, e
     status_tmax, x_new, e_new = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
-    x_valid, e_valid = to_integer_solution(x_new, M, N, K, c, p, d, b, env)
+    status_valid, x_valid, e_valid = status_tmax, x_new, e_new
+    
+    cost_lp = get_solution_cost(x_new, e_new, M, N, K, c, p, d, b)
+    makespan_lp = get_solution_makespan(x_new, e_new, M, N, K, c, p, d, b)
+
+    list_of_cmax_lp.append(cost_lp)
+    list_of_tmax_lp.append(makespan_lp)
     
     # Compute the current value of cost and makespan with the initial solution
+    x_valid, e_valid = to_integer_solution(x_new, M, N, K, c, p, d, b, env)
     new_cost = get_solution_cost(x_valid, e_valid, M, N, K, c, p, d, b)
     new_makespan = get_solution_makespan(x_valid, e_valid, M, N, K, c, p, d, b)
     
+    # Save Cmax and Tmax used
+    list_of_cmax_used.append(Cmax)
+    list_of_tmax_used.append(Tmax)
+
     # Save valid solutions
-    list_of_solution.append([Cmax, Tmax, x, e])
+    list_of_solution.append([Cmax, Tmax, x_valid, e_valid])
     list_of_valid_cmax.append(new_cost)
     list_of_valid_tmax.append(new_makespan)
 
-    while (low_tmax <= high_tmax and iterations < 8):
+    while (low_tmax <= high_tmax and iterations < 10):
         mid_tmax = int((high_tmax + low_tmax) / 2)
         status_tmax, x_new, e_new = LP(Cmax, mid_tmax, M, N, K, c, p, d, b, env)
         
@@ -347,6 +366,12 @@ def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, x, e, M, N, K, c, p, d, b, env,
         if status_tmax == 0:
             high_tmax = mid_tmax
             
+            cost_lp = get_solution_cost(x_new, e_new, M, N, K, c, p, d, b)
+            makespan_lp = get_solution_makespan(x_new, e_new, M, N, K, c, p, d, b)
+            
+            list_of_cmax_lp.append(cost_lp)
+            list_of_tmax_lp.append(makespan_lp)
+
             x_valid, e_valid = to_integer_solution(x_new, M, N, K, c, p, d, b, env)
             status_valid  = status_tmax
 
@@ -355,6 +380,10 @@ def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, x, e, M, N, K, c, p, d, b, env,
 
             # Please, notice that new_makespan <= 3*high_tmax, so we can not
             # update high_tmax with new_makespan.
+
+            list_of_cmax_used.append(Cmax)
+            list_of_tmax_used.append(mid_tmax)
+
             list_of_solution.append([new_cost, new_makespan, x_valid, e_valid])
             list_of_valid_cmax.append(new_cost)
             list_of_valid_tmax.append(new_makespan)
@@ -364,16 +393,7 @@ def minimize_cmax_and_tmax_by_factor(Cmax, Tmax, x, e, M, N, K, c, p, d, b, env,
             low_tmax = mid_tmax
 
         iterations += 1
-
-    #plt.plot(Tmax, Cmax, 'rs')
-    #plt.plot(list_of_valid_tmax, list_of_valid_cmax, 'go-', linewidth=2)
-    #plt.xlabel("Makespan")
-    #plt.ylabel("Cost")
-    #plt.savefig('../exp-out/approx_algo_workload_1_platform_1/super.png')
-
-    #print("List of valid solutions: ", list_of_solution)
-
-    return status_valid, x_valid, e_valid, new_cost, new_makespan, list_of_valid_cmax, list_of_valid_tmax
+    return status_valid, x_valid, e_valid, new_cost, new_makespan, list_of_valid_cmax, list_of_valid_tmax, list_of_cmax_used, list_of_tmax_used, list_of_cmax_lp, list_of_tmax_lp
 
 def get_cost(x, e, c, d):
     tcost = np.sum(x*c)

@@ -53,7 +53,8 @@ class CacheLocality(BatsimScheduler):
 
         self.notify_already_sent = False
         self.end_of_simulation_asked = False
-        
+        self.start_simulation = False
+
         self.time_next_update = 1.0
         self.update_period = 150
         self.sched_delay = 0.005
@@ -117,7 +118,9 @@ class CacheLocality(BatsimScheduler):
         Get the layers of a job_cotainer and return as a list.
         """
 
+        #print(job_container, self.container_description.get("profiles").get(job_container))
         total_download_size = self.container_description.get("profiles").get(job_container).get("size")
+        #print(total_download_size)
         if(total_download_size != None):
             return total_download_size
         else:
@@ -154,6 +157,7 @@ class CacheLocality(BatsimScheduler):
                                 scores_machine_container[machine_id] += list_of_layers_of_second_container.get(layer)
                         
                     layers_total_download_size = self.get_layers_total_download_size_from_container(job_container)
+                    #print(job_container, scores_machine_container[machine_id], layers_total_download_size)
                     if(scores_machine_container[machine_id] != 0 and layers_total_download_size != -1):
                         scores_machine_container[machine_id] /= layers_total_download_size
                     
@@ -167,11 +171,14 @@ class CacheLocality(BatsimScheduler):
 
     def get_earliest_submitted_job(self):
         selected_job = None
+        selected_job_id = None
         for job in self.openJobs:
+            job_id = int(job.id.split("!")[1])
             if (selected_job == None):
                 selected_job = job
-            elif (selected_job.submit_time > job.submit_time):
+            elif (selected_job_id > job_id):
                 selected_job = job
+            selected_job_id = int(selected_job.id.split("!")[1])
         return selected_job
 
     def onSimulationBegins(self):
@@ -207,11 +214,13 @@ class CacheLocality(BatsimScheduler):
         The decion process. It will check if the machines have containers required by the jobs.
         If not, dybamic jobs will be created, and these jobs will represent the downloading of containers.
         """
-
-        while(len(self.openJobs) != self.workload_size):
-            break
+        
+        if(len(self.openJobs) == self.workload_size):
+            #print("Waiting", self.workload_size, self.openJobs)
+            self.start_simulation = True
+            #break
         scheduledJobs = []
-        while(len(self.openJobs) > 0):
+        while(len(self.openJobs) > 0 and self.start_simulation == True):
             job = self.get_earliest_submitted_job()
             #print("job.profile_dict:", job)
             job_io_size = job.profile_dict["io"]
@@ -249,13 +258,19 @@ class CacheLocality(BatsimScheduler):
                     if new_profile_name not in self.container_description["profiles"].keys():
                         new_profile[new_profile_name] = self.container_description["profiles"].get(job_container)
                         
-                        new_computation_required = round(new_profile[new_profile_name]["cpu"] - (new_profile[new_profile_name]["cpu"] * download_reduction), 2)
+                        if (download_reduction >= 1):
+                            new_computation_required = 1
+                            new_size = 1
+                            
+                        else:
+                            new_computation_required = round(new_profile[new_profile_name]["cpu"] - (new_profile[new_profile_name]["cpu"] * download_reduction), 2)
+                            new_size = round(new_profile[new_profile_name]["size"] - (new_profile[new_profile_name]["size"] * download_reduction), 2)
+
                         new_profile[new_profile_name]["cpu"] = new_computation_required
-                        
-                        new_size = round(new_profile[new_profile_name]["size"] - (new_profile[new_profile_name]["size"] * download_reduction), 2)
                         new_profile[new_profile_name]["size"] = new_size
                         
                         self.container_description["profiles"][new_profile_name] = new_profile
+                        #print("Registering new profile: ", new_profile)
                         self.bs.register_profiles("w0", new_profile)
 
                 # Create a dynamic job
@@ -371,7 +386,9 @@ class CacheLocality(BatsimScheduler):
             self.scheduleJobs()
 
     def onNoMoreEvents(self):
+        #print("No more events")
         if(self.bs.nb_jobs_submitted != 0 and len(self.openJobs) == 0 and len(self.jobs_completed) == self.bs.nb_jobs_submitted and self.notify_already_sent == False):
+            #print("True")
             self.notify_already_sent = True
             self.bs.notify_registration_finished()
 

@@ -38,11 +38,6 @@ class ApproxAlgo(BatsimScheduler):
         else:
             assert False, "Could not find input path {}".format(options["random_seed"])
 
-        if "optimization_factor" in options:
-            self.approx_algo_optimization_factor = options["optimization_factor"]
-        else:
-            assert False, "Could not find input path {}".format(options["optimization_factor"])            
-        
         # Read and save the external profiles (for containers)
         self.list_of_containers = []
         with open(options["container_description_path"]) as f:
@@ -50,7 +45,7 @@ class ApproxAlgo(BatsimScheduler):
         for container in self.container_description["profiles"].keys():
             self.list_of_containers.append(container)
 
-        random.seed(self.random_seed)
+        #random.seed(self.random_seed)
 
         self.nb_completed_jobs = 0
         self.nb_jobs = 0
@@ -93,7 +88,10 @@ class ApproxAlgo(BatsimScheduler):
 
         self.list_of_valid_cost = []
         self.list_of_valid_makespan = []
-
+        self.list_of_cost_max_used = []
+        self.list_of_makespan_max_used = []
+        self.list_of_cost_lp = []
+        self.list_of_makespan_lp = []
 
 # ----------------------------- ApproxAlgo -----------------------------------------
 
@@ -236,21 +234,37 @@ class ApproxAlgo(BatsimScheduler):
         #self.verifyConstraintsLPAlgo(Cmax, Tmax, M, N, K, c, p, d, b, env)
         
         # Compute the solution using the safe Cmax and Tmax and save it
-        status_basis, x_basis, e_basis = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
-        status, x, e = status_basis, x_basis, e_basis
+        
+        # new comments
+        #status_basis, x_basis, e_basis = LP(Cmax, Tmax, M, N, K, c, p, d, b, env)
+        #status, x, e = status_basis, x_basis, e_basis
         # If there is no solution even with the safe values, finish it
-        if (status == 1):
-            return 1, None
+        #if (status == 1):
+        #    return 1, None
 
         # Try to optimize the solution and update the safe results only if there is an optimization available.
-        optimization_factor = self.approx_algo_optimization_factor
-        if (optimization_factor != 0):
-            status_new, x_new, e_new, new_cmax, new_tmax, list_of_valid_cmax, list_of_valid_tmax = minimize_cmax_and_tmax_by_factor(Cmax, Tmax, x_basis, e_basis, M, N, K, c, p, d, b, env, optimization_factor)
-            if (status_new == 0):
-                status, x, e = status_new, x_new, e_new
-                Cmax, Tmax = new_cmax, new_tmax
-                self.list_of_valid_cost = list_of_valid_cmax
-                self.list_of_valid_makespan = list_of_valid_tmax
+        #optimization_factor = self.approx_algo_optimization_factor
+        #if (optimization_factor != 0):
+        """
+        status_new, x_new, e_new, new_cmax, new_tmax, list_of_valid_cmax, list_of_valid_tmax = minimize_cmax_and_tmax(Cmax, Tmax, x_basis, e_basis, M, N, K, c, p, d, b, env)#, optimization_factor)
+        if (status_new == 0):
+            status, x, e = status_new, x_new, e_new
+            Cmax, Tmax = new_cmax, new_tmax
+            self.list_of_valid_cost = list_of_valid_cmax
+            self.list_of_valid_makespan = list_of_valid_tmax
+        """
+
+        status_new, x_new, e_new, new_cmax, new_tmax, list_of_valid_cmax, list_of_valid_tmax, list_of_cmax_used, list_of_tmax_used, list_of_cmax_lp, list_of_tmax_lp = minimize_cmax_and_tmax(Cmax, Tmax, M, N, K, c, p, d, b, env)#, optimization_factor)
+        #if (status_new == 0):
+        #    status, x, e = status_new, x_new, e_new
+        Cmax, Tmax = new_cmax, new_tmax
+        self.list_of_valid_cost = list_of_valid_cmax
+        self.list_of_valid_makespan = list_of_valid_tmax
+        self.list_of_cost_max_used = list_of_cmax_used
+        self.list_of_makespan_max_used = list_of_tmax_used
+        self.list_of_cost_lp = list_of_cmax_lp
+        self.list_of_makespan_lp = list_of_tmax_lp
+
 
         print("Input matrixes: ")
         print("c:")
@@ -265,17 +279,19 @@ class ApproxAlgo(BatsimScheduler):
         print("Cmax:",Cmax)
         print("Tmax:",Tmax)
 
-        print("LP solution status : ", status)
-        print("Fractional Solution:")
-        print_as_matrix(e)
-
-        x_a, e_a = to_integer_solution(x, M, N, K, c, p, d, b, env)
-
+        print("LP solution status : ", status_new)
+        #print("Fractional Solution:")
+        
         print("Integerized solution : ")
-        print_as_matrix(x_a)
-        print(" ------------------------------------------  ")
+        print_as_matrix(x_new)
 
-        return 0, x_a
+        #x_a, e_a = to_integer_solution(x, M, N, K, c, p, d, b, env)
+
+        #print("Integerized solution : ")
+        #print_as_matrix(x_a)
+        #print(" ------------------------------------------  ")
+
+        return status_new, x_new
 
     def convertLPSolutionToBatsimFormat(self, lp_solution):
         print("The solution is: \n", lp_solution)
@@ -371,7 +387,9 @@ class ApproxAlgo(BatsimScheduler):
                             scores_machine_container[machine_id] += list_of_layers_of_second_container.get(layer)
                     
                 layers_total_download_size = self.get_layers_total_download_size_from_container(job_container)
+                print(scores_machine_container[machine_id], layers_total_download_size)
                 if(scores_machine_container[machine_id] != 0 and layers_total_download_size != -1):
+                    print(scores_machine_container[machine_id], layers_total_download_size)
                     scores_machine_container[machine_id] /= layers_total_download_size
                 
                 # If there is any problem with the container definition, some missing size in the .json file, for example, consider such container as invalid, so size 0
@@ -460,6 +478,7 @@ class ApproxAlgo(BatsimScheduler):
             # Get the allocation decisions
             approx_algo_allocation = None
             if(len(self.openJobs) == self.workload_size):
+
                 solution_status, lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
                 if (solution_status == 1):
                     break
@@ -519,13 +538,20 @@ class ApproxAlgo(BatsimScheduler):
                             new_profile = {}
                             if new_profile_name not in self.container_description["profiles"].keys():
                                 new_profile[new_profile_name] = self.container_description["profiles"].get(job_container)
-                                new_computation_required = round(new_profile[new_profile_name]["cpu"] - (new_profile[new_profile_name]["cpu"] * download_reduction), 2)
+                        
+                                if (download_reduction >= 1):
+                                    new_computation_required = 1
+                                    new_size = 1
+                                    
+                                else:
+                                    new_computation_required = round(new_profile[new_profile_name]["cpu"] - (new_profile[new_profile_name]["cpu"] * download_reduction), 2)
+                                    new_size = round(new_profile[new_profile_name]["size"] - (new_profile[new_profile_name]["size"] * download_reduction), 2)
+
                                 new_profile[new_profile_name]["cpu"] = new_computation_required
-                                
-                                new_size = round(new_profile[new_profile_name]["size"] - (new_profile[new_profile_name]["size"] * download_reduction), 2)
                                 new_profile[new_profile_name]["size"] = new_size
                                 
                                 self.container_description["profiles"][new_profile_name] = new_profile
+                                print("Registering new profile: ", new_profile)
                                 self.bs.register_profiles("w0", new_profile)
 
                         # Create a dynamic job
@@ -658,10 +684,10 @@ class ApproxAlgo(BatsimScheduler):
             }
             self.save_output_as_csv(self.download_info_csv_path + "out_download_data_info.csv", output_data)
 
-            header = ["valid_cost", "valid_makespan"]
+            header = ["valid_cost", "valid_makespan", "max_cost_used", "max_makespan_used", "max_cost_lp", "max_makespan_lp"]
             with open(self.download_info_csv_path + "out_valid_solutions.csv", 'w', encoding='UTF8') as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
                 for i in range(0, len(self.list_of_valid_cost)):
-                    row = [self.list_of_valid_cost[i], self.list_of_valid_makespan[i]]
+                    row = [self.list_of_valid_cost[i], self.list_of_valid_makespan[i], self.list_of_cost_max_used[i], self.list_of_makespan_max_used[i], self.list_of_cost_lp[i], self.list_of_makespan_lp[i]]
                     writer.writerow(row)
