@@ -358,7 +358,7 @@ def minimize_cmax_and_tmax(Cmax, Tmax, M, N, K, c, p, d, b, env):#, factor):
     list_of_valid_cmax.append(new_cost)
     list_of_valid_tmax.append(new_makespan)
 
-    while (low_tmax <= high_tmax and iterations < 10):
+    while (low_tmax <= high_tmax and iterations < 8):
         mid_tmax = int((high_tmax + low_tmax) / 2)
         status_tmax, x_new, e_new = LP(Cmax, mid_tmax, M, N, K, c, p, d, b, env)
         
