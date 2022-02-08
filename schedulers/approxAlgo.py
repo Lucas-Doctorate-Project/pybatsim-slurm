@@ -146,8 +146,10 @@ class ApproxAlgo(BatsimScheduler):
         print("Integerized solution : ")
         print(x_a)
 
-    def convertBatsimData(self, dict_jobs, list_machines_available):
+    def convertBatsimData(self, queue_of_jobs, list_machines_available):
         print(" --------------- convertBatsimData ---------------------------  ")
+
+        print("Using the sorted queue: ", queue_of_jobs)
 
         list_of_functions_execution_time = []
         list_of_functions_cost = []
@@ -168,7 +170,7 @@ class ApproxAlgo(BatsimScheduler):
             self.mapping_machine_id[machine_id] = machine
             machine_cpu_speed = self.machines_description[machine].split("Mf")[0]
             job_id = 0
-            for job in dict_jobs:
+            for job in queue_of_jobs:
                 self.mapping_job_id[job_id] = job.id
 
                 function_computation_needed = float(job.profile_dict['cpu'])
@@ -209,7 +211,7 @@ class ApproxAlgo(BatsimScheduler):
             machine_id += 1
 
         list_of_containers = []
-        for job in dict_jobs:
+        for job in queue_of_jobs:
             job_container = job.profile_dict['container']['image'] + '_' + job.profile_dict['container']['tag']
             job_container_in_mapping_id = self.mapping_container_id.get(job_container)
             list_of_containers.append(job_container_in_mapping_id)
@@ -225,11 +227,11 @@ class ApproxAlgo(BatsimScheduler):
         print("sum_cx", sum_cx)
     """
 
-    def callsLPAlgo(self, dict_jobs, list_machines_available):
+    def callsLPAlgo(self, queue_of_jobs, list_machines_available):
         print(" ------------------------- callsLPAlgo -------------------- ")
         
         # Initialize varibles for the LP Algo
-        N, M, K, p, c, b, d, env = self.convertBatsimData(dict_jobs, list_machines_available)
+        N, M, K, p, c, b, d, env = self.convertBatsimData(queue_of_jobs, list_machines_available)
         Cmax, Tmax = compute_max_cmax_and_tmax(p, c, b, d, K, M, N)
         #self.verifyConstraintsLPAlgo(Cmax, Tmax, M, N, K, c, p, d, b, env)
         
@@ -434,6 +436,35 @@ class ApproxAlgo(BatsimScheduler):
             writer.writerow(data)
         return
 
+    def sort_jobs(self, set_of_jobs):
+        """
+        It receives a set of jobs (type set()), and return a list with all elementes sorted by id.
+        """
+        temporary_queue = set_of_jobs.copy()
+        sorted_queue = []
+        #self.openJobs.add(job)
+
+        while (len(temporary_queue) > 0):
+            selected_job = None
+            selected_job_id = None
+            queue = iter(temporary_queue)
+            for job in queue:
+                #job = next(queue)
+                job_id = int(job.id.split("!")[1])
+
+                if (selected_job == None):
+                    selected_job = job
+                elif (selected_job_id > job_id):
+                    selected_job = job
+
+                selected_job_id = int(selected_job.id.split("!")[1])
+            
+            # At this point, selected_job is the earlies one (smaller id)
+            sorted_queue.append(selected_job)
+            temporary_queue.remove(selected_job)
+
+        return sorted_queue
+
     def onSimulationBegins(self):
         """
         Verify if the correct flags has been set when the simulation begins
@@ -479,7 +510,8 @@ class ApproxAlgo(BatsimScheduler):
             approx_algo_allocation = None
             if(len(self.openJobs) == self.workload_size):
 
-                solution_status, lp_solution = self.callsLPAlgo(self.openJobs, self.availableResources)
+                open_jobs_sorted = self.sort_jobs(self.openJobs)
+                solution_status, lp_solution = self.callsLPAlgo(open_jobs_sorted, self.availableResources)
                 if (solution_status == 1):
                     break
                 approx_algo_allocation = self.convertLPSolutionToBatsimFormat(lp_solution)
