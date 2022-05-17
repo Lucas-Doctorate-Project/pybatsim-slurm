@@ -148,7 +148,7 @@ class Batsim(object):
         }
 
         self.jobs[job.id].allocation = job.allocation
-        self.jobs[job.id].state = Job.State.RUNNING
+        self.jobs[job.id].job_state = Job.State.RUNNING
 
         if io_job is not None:
             message["data"]["additional_io_job"] = io_job
@@ -187,7 +187,7 @@ class Batsim(object):
                     "job_id": job_id
                 }
             })
-            self.jobs[job_id].state = Job.State.REJECTED
+            self.jobs[job_id].job_state = Job.State.REJECTED
         self.nb_jobs_rejected += len(job_ids)
 
     def reject_jobs(self, jobs):
