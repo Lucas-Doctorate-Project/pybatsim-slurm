@@ -149,6 +149,7 @@ class Batsim(object):
 
         self.jobs[job.id].allocation = job.allocation
         self.jobs[job.id].job_state = Job.State.RUNNING
+        self.jobs[job.id].starting_time = self.time()
 
         if io_job is not None:
             message["data"]["additional_io_job"] = io_job
@@ -656,6 +657,7 @@ class Job(object):
         self.requested_time = walltime
         self.requested_resources = res
         self.profile = profile
+        self.starting_time = None  # will be set when calling BatsimScheduler.execute_job
         self.finish_time = None  # will be set on completion by batsim
         self.job_state = Job.State.UNKNOWN
         self.return_code = None
