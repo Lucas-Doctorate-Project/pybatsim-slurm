@@ -7,7 +7,7 @@ from pybatsim.batsim.batsim import BatsimScheduler
 
 class RandomSched(BatsimScheduler):
 
-    def onAfterBatsimInit(self):
+    def onSimulationBegins(self):
         self.res = [x for x in range(self.bs.nb_resources)]
         self.jobs_res = {}
         self.openJobs = set()
@@ -38,7 +38,9 @@ class RandomSched(BatsimScheduler):
             self.bs.reject_jobs([job]) # This job requests more resources than the machine has
         else:
             self.openJobs.add(job)
-            self.scheduleJobs()
 
     def onJobCompletion(self, job):
         pass
+
+    def onNoMoreEvents(self):
+        self.scheduleJobs()

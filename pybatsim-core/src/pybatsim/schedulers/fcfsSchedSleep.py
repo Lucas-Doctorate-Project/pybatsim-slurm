@@ -43,7 +43,7 @@ class State(Enum):
 
 class FcfsSchedSleep(BatsimScheduler):
 
-    def onAfterBatsimInit(self):
+    def onSimulationBegins(self):
         self.nb_completed_jobs = 0
 
         self.jobs_completed = []
@@ -151,14 +151,12 @@ class FcfsSchedSleep(BatsimScheduler):
             self.bs.reject_jobs([job]) # This job requests more resources than the machine has
         else:
             self.open_jobs.append(job)
-            self.scheduleJobs()
 
     def onJobCompletion(self, job):
         for res in job.allocation:
             self.idle_machines.add(res)
             self.computing_machines.remove(res)
             self.machines_states[res] = State.Idle.value
-        self.scheduleJobs()
 
     def onMachinePStateChanged(self, machines, new_pstate):
         machine = machines[0]
@@ -181,4 +179,5 @@ class FcfsSchedSleep(BatsimScheduler):
         else:
             sys.exit("Switched to an unhandled pstate: " + str(new_pstate))
 
+    def onNoMoreEvents(self):
         self.scheduleJobs()
