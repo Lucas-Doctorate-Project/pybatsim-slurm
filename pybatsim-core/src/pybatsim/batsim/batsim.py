@@ -563,17 +563,8 @@ class Batsim(object):
                 self.scheduler.onJobMessage(timestamp, j, msg)
 
             elif event_type == "RESOURCE_STATE_CHANGED":
-                intervals = event_data["resources"].split(" ")
-                for interval in intervals:
-                    nodes = interval.split("-")
-                    if len(nodes) == 1:
-                        nodeInterval = (int(nodes[0]), int(nodes[0]))
-                    elif len(nodes) == 2:
-                        nodeInterval = (int(nodes[0]), int(nodes[1]))
-                    else:
-                        raise Exception("Multiple intervals are not supported")
-                    self.scheduler.onMachinePStateChanged(
-                        nodeInterval, event_data["state"])
+                machines = ProcSet.from_str(event_data["resources"])
+                self.scheduler.onMachinePStateChanged(machines, event_data["state"])
 
             elif event_type == "ANSWER":
                 if "consumed_energy" in event_data:
@@ -731,7 +722,7 @@ class BatsimScheduler(object):
     def onJobsKilled(self, jobs):
         raise NotImplementedError()
 
-    def onMachinePStateChanged(self, nodeid, pstate):
+    def onMachinePStateChanged(self, machines, pstate):
         raise NotImplementedError()
 
     def onReportEnergyConsumed(self, consumed_energy):

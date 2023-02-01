@@ -55,6 +55,8 @@ pybatsim = "pybatsim.cmdline:main"
 # definition of officialy maintained schedulers
 [tool.poetry.plugins."pybatsim.schedulers"]
 backfill-easy = "pybatsim.schedulers.easyBackfill:EasyBackfill"
+fcfs = "pybatsim.schedulers.fcfs:Fcfs"
+fcfs-dvfs = "pybatsim.schedulers.fcfsWithDVFS:FcfsWithDVFS"
 fcfs-sleeper = "pybatsim.schedulers.fcfsSchedSleep:FcfsSchedSleep"
 filler = "pybatsim.schedulers.fillerSched:FillerSched"
 filler-events = "pybatsim.schedulers.fillerSchedWithEvents:FillerSchedWithEvents"
