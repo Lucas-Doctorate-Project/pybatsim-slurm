@@ -564,7 +564,7 @@ class Batsim(object):
 
             elif event_type == "RESOURCE_STATE_CHANGED":
                 machines = ProcSet.from_str(event_data["resources"])
-                self.scheduler.onMachinePStateChanged(machines, event_data["state"])
+                self.scheduler.onMachinePStateChanged(machines, int(event_data["state"]))
 
             elif event_type == "ANSWER":
                 if "consumed_energy" in event_data:

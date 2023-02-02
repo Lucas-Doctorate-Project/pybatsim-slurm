@@ -26,19 +26,17 @@ from pybatsim.batsim.batsim import BatsimScheduler
 
 class PState(Enum):
     ComputeFast = 0
-    ComputeMedium = 1
-    ComputeSlow = 2
-    Sleep = 3
-    SwitchingOFF = 4
-    SwitchingON = 5
+    Sleep = 1
+    SwitchingOFF = 2
+    SwitchingON = 3
 
 
 class State(Enum):
     Computing = 0
     Idle = 1
     Sleeping = 2
-    SwitchingON = 3
-    SwitchingOFF = 4
+    SwitchingOFF = 3
+    SwitchingON = 4
 
 
 class FcfsSchedSleep(BatsimScheduler):
@@ -64,7 +62,7 @@ class FcfsSchedSleep(BatsimScheduler):
         print("machines_states", self.machines_states)
 
     def scheduleJobs(self):
-        print('\n\n\n\n')
+        print('\n\n')
         print('open_jobs = ', self.open_jobs)
 
         print('computingM = ', self.computing_machines)
@@ -81,9 +79,6 @@ class FcfsSchedSleep(BatsimScheduler):
         while loop and self.open_jobs:
             job = self.open_jobs[0]
             nb_res_req = job.requested_resources
-
-            if nb_res_req > self.bs.nb_resources:  # Job too big -> rejection
-                sys.exit("Rejection unimplemented")
 
             # Job fits now -> allocation
             elif nb_res_req <= len(self.idle_machines):
@@ -160,7 +155,7 @@ class FcfsSchedSleep(BatsimScheduler):
 
     def onMachinePStateChanged(self, machines, new_pstate):
         machine = machines[0]
-        if (new_pstate == PState.ComputeFast.value) or (new_pstate == PState.ComputeMedium.value) or (new_pstate == PState.ComputeSlow.value):  # switched to a compute pstate
+        if (new_pstate == int(PState.ComputeFast.value)):  # switched to a compute pstate
             if self.machines_states[machine] == State.SwitchingON.value:
                 self.switching_ON_machines.remove(machine)
                 self.idle_machines.add(machine)
@@ -168,7 +163,7 @@ class FcfsSchedSleep(BatsimScheduler):
             else:
                 sys.exit(
                     "Unhandled case: a machine switched to a compute pstate but was not switching ON")
-        elif new_pstate == PState.Sleep.value:
+        elif new_pstate == int(PState.Sleep.value):
             if self.machines_states[machine] == State.SwitchingOFF.value:
                 self.switching_OFF_machines.remove(machine)
                 self.sleeping_machines.add(machine)
