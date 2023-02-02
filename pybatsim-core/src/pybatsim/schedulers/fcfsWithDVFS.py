@@ -11,10 +11,10 @@ This scheduler is a FCFS with DVFS:
 - The DVFS strategy is simple and random:
   - every 10 seconds the scheduler sets a random pstate on every machine executing a job
 
-Let us assume all machines have multiple pstates (corresponding to file simple_energy_platform.xml)
+Let us assume all machines have multiple pstates (with possibly virtual/sleep pstates)
 """
 
-from random import randrange
+from random import choice
 from procset import ProcSet
 from itertools import islice
 
@@ -42,15 +42,19 @@ class FcfsWithDVFS(BatsimScheduler):
         self.computing_machines = ProcSet()
         self.idle_machines = ProcSet((0,self.bs.nb_compute_resources-1))
 
-        self.machine_nb_pstates = {}
+        self.machines_pstates_list = {}
 
-        # Retrieve the number of pstates for each machine
         for machine_dict in self.bs.machines['compute']:
+            # Retrieve the number of pstates for each machine
             watts = machine_dict['properties']['wattage_per_state'].split(", ")
-            self.machine_nb_pstates[machine_dict['id']] = len(watts)
-            print(watts)
+            pstates_list = list(range(len(watts)))
 
-        print(self.machine_nb_pstates)
+            if 'sleep_pstates' in machine_dict['properties']:
+                # But remove the sleep pstates
+                sleep_pstates = [int(x) for x in machine_dict['properties']['sleep_pstates'].replace(':', ',').split(',')]
+                pstates_list = [x for x in pstates_list if not x in sleep_pstates]
+
+            self.machines_pstates_list[machine_dict['id']] = pstates_list
 
 
     def scheduleJobs(self):
@@ -114,7 +118,7 @@ class FcfsWithDVFS(BatsimScheduler):
         self.logger.info("Performing random DVFS")
 
         for r in self.computing_machines:
-            new_pstate = randrange(0, self.machine_nb_pstates[r])
+            new_pstate = choice(self.machines_pstates_list[r])
             self.bs.set_resource_state(r, new_pstate)
 
     def onMachinePStateChanged(self, machines, pstate):
