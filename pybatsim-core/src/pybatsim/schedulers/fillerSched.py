@@ -7,7 +7,7 @@ from pybatsim.batsim.batsim import BatsimScheduler
 
 class FillerSched(BatsimScheduler):
 
-    def onAfterBatsimInit(self):
+    def onSimulationBegins(self):
         self.nb_completed_jobs = 0
 
         self.jobs_completed = []
@@ -55,8 +55,9 @@ class FillerSched(BatsimScheduler):
             self.bs.reject_jobs([job]) # This job requests more resources than the machine has
         else:
             self.openJobs.add(job)
-            self.scheduleJobs()
 
     def onJobCompletion(self, job):
         self.availableResources |= job.allocation
+
+    def onNoMoreEvents(self):
         self.scheduleJobs()
