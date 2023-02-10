@@ -59,7 +59,6 @@ class FcfsSchedSleep(BatsimScheduler):
 
         self.machines_states = {
             int(i): State.Idle.value for i in range(self.bs.nb_resources)}
-        print("machines_states", self.machines_states)
 
     def scheduleJobs(self):
         print('\n\n')
@@ -81,7 +80,7 @@ class FcfsSchedSleep(BatsimScheduler):
             nb_res_req = job.requested_resources
 
             # Job fits now -> allocation
-            elif nb_res_req <= len(self.idle_machines):
+            if nb_res_req <= len(self.idle_machines):
                 res = ProcSet(*self.idle_machines[:nb_res_req])
                 job.allocation = res
                 scheduled_jobs.append(job)
