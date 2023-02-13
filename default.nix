@@ -53,9 +53,9 @@ let
         [ pybatsim-core ];
     });
 
-    # external scheduler example
+    # entry point for external scheduler example
     pybatsim-example = python3Packages.buildPythonPackage rec {
-      pname = "pybatsim-example";
+      pname = "pybatsim-example-entry-point";
       version = "local";
       format = "pyproject";
 
@@ -64,7 +64,6 @@ let
         "^poetry\.lock$"
         "^.*\.py$"
       ];
-
       buildInputs = with python3Packages; [
         poetry
       ];
@@ -72,11 +71,22 @@ let
         pybatsim-core
       ];
     };
+
     # example shell that enables to run the example scheduler (run `pybatsim rejector` in the shell)
     example-shell = pkgs.mkShell rec {
       buildInputs = [
         pybatsim-example
       ];
+    };
+
+    # small shell to dev and test schedulers
+    dev-shell = pkgs.mkShell rec {
+      buildInputs = [
+        pkgs.stdenv.cc.cc.lib
+        python3Packages.poetry
+      ];
+
+      LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib";
     };
   };
 in
