@@ -1,6 +1,7 @@
-{ kapack ? import
-    (fetchTarball "https://github.com/oar-team/nur-kapack/archive/master.tar.gz")
-  {}
+{ kapack ? import (fetchTarball {
+    url = "https://github.com/oar-team/nur-kapack/archive/7fa57b4170962b5c88d077d6f625628e7763c81c.tar.gz";
+    sha256 = "sha256:13irywc4lm30xj4z722whk5fnrqkd3a71vh0fc2c4sqfd1rhcfl6";
+  }) {}
 , pybatsim-core-base ? kapack.pybatsim-core
 , pybatsim-functional-base ? kapack.pybatsim-functional
 }:
