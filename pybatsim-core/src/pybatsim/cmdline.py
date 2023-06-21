@@ -204,24 +204,6 @@ def run_simulation(scheduler, *, socket_endpoint, event_socket_endpoint, timeout
     tend = time.perf_counter_ns()
 
     logging.info(f'Simulation ran {(tend - tstart) * 1e-9:e} seconds (elapsed real time)')
-    logging.info(
-        'jobs: ' +
-        ', '.join((
-            f'{batsim.nb_jobs_submitted} submitted',
-            f'{batsim.nb_jobs_scheduled} scheduled',
-            f'{batsim.nb_jobs_rejected} rejected',
-            f'{batsim.nb_jobs_killed} killed',
-            f'{len(batsim.jobs_manually_changed)} changed',
-            f'{batsim.nb_jobs_timeout} timeout',
-            f'{batsim.nb_jobs_successful} success',
-            f'{batsim.nb_jobs_completed} complete',
-        ))
-    )
-
-    # TODO: deport check to Batsim class
-    if batsim.nb_jobs_submitted != \
-       batsim.nb_jobs_scheduled + batsim.nb_jobs_rejected + len(batsim.jobs_manually_changed):
-        sys.exit(1)
 
 
 def main(args=None):
