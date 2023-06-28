@@ -50,10 +50,13 @@ class Batsim(object):
         if init_msg is not None:
             flags = unpack('i', init_msg[0:4])[0]
             data_size = unpack('i', init_msg[4:8])[0]
-            edc_init_str = init_msg[8:] # init_str contains the scheduler initialization buffer provided to Batsim command
+            edc_init_str = init_msg[8:].decode('utf-8') # init_str contains the scheduler initialization buffer provided to Batsim command
 
             assert flags == 2, f"Pybatsim uses JSON format of the batprotocol, expected flag value '2' but got {flags}"
-            assert data_size == len(edc_init_str), f"Mismatch between received data_size and actual size of data (got {data_size} and {len(edc_init_str)})"
+            assert data_size == len(edc_init_str), f"""
+                Mismatch between received data_size
+                and actual size of data (got {data_size} and {len(edc_init_str)})
+                """
 
             self.network.send_string("") # Answer message MUST be empty
         else:
@@ -130,17 +133,18 @@ class Batsim(object):
                 self.batsim_execution_context = event_data["batsim_execution_context_json"]
 
                 if self.simulation_context.dynamic_registration:
-                    self.logger.warning("Dynamic registration of jobs is ENABLED. The scheduler must send a FinishRegistrationEvent event to let Batsim end the simulation.")
+                    self.logger.warning("Dynamic registration of jobs is ENABLED. "
+                        "The scheduler must send a FinishRegistrationEvent event to let Batsim end the simulation.")
 
-                self.profiles = event_data["profiles"]
                 self.workloads = event_data["workloads"]
+                self.profiles = event_data["profiles"]
 
                 self.scheduler.onSimulationBegins()
 
             elif event_type == "SimulationEndsEvent":
                 assert self.running_simulation, "No simulation is currently running"
                 self.running_simulation = False
-                self.logger.info("All jobs have been submitted and completed!")
+                #self.logger.info("All jobs have been submitted and completed!")
                 simu_ends_received = True
                 self.scheduler.onSimulationEnds()
 
@@ -156,11 +160,6 @@ class Batsim(object):
                         self.profiles[job.workload] = {}
                     if job.profile_id not in self.profiles[job.workload]: # Then add the profile
                         self.profiles[job.workload][job.profile_id] = profile
-
-                # Keep a pointer in the job structure
-                # TODO: remove these 2 lines?
-                #assert job.profile_id in self.profiles[job.workload]
-                #job.profile_dict = self.profiles[job.workload][job.profile_id]
 
                 # Warning: override dynamic job but keep metadata
                 if job_id in self.jobs:
@@ -205,15 +204,24 @@ class Batsim(object):
             elif event_type == "JobsKilledEvent":
                 # get progress
                 killed_jobs = []
-                for jid in event_data["job_ids"]:
+
+                for d in event_data["progresses"]:
+                    j = self.jobs[d["job_id"]]
+                    j.kill_progress_type = d["wrapper"]["kill_progress_type"]
+                    j.kill_progress = d["wrapper"]["kill_progress"]
+                    killed_jobs.append(j)
+
+                '''for jid in event_data["job_ids"]:
                     j = self.jobs[jid]
+                    ### TODO : Is this still possible with batprotocol?
                     # The job_progress can only be empty if the job has completed
                     # between the order of killing and the killing itself.
                     # So in that case just dont put it in the killed jobs
                     # because it was already marked as complete.
-                    if len(event_data["job_progress"]) != 0:
-                        j.progress = event_data["job_progress"][jid]
-                        killed_jobs.append(j)
+                    if len(job_progresses) != 0:
+                        j.progress = job_progresses[jid]
+                        killed_jobs.append(j)'''
+
                 if len(killed_jobs) != 0:
                     self.scheduler.onJobsKilled(killed_jobs)
 
@@ -226,7 +234,7 @@ class Batsim(object):
                 self.scheduler.onMachinePStateChanged(machines, int(event_data["state"]))
 
             elif event_type == 'RequestedCallEvent':
-                self.scheduler.onRequestedCall()
+                self.scheduler.onRequestedCall(event_data["call_me_later_id"])
 
             elif event_type == 'AllStaticJobsHaveBeenSubmittedEvent':
                 self.no_more_static_jobs = True
@@ -314,9 +322,6 @@ class Batsim(object):
 
 
     def answer_simulation_hello(self, sched_name, sched_version, sched_commit=""):
-        #################
-        print("answering simulation hello to Batsim") # TODO REMOVE THIS ##################
-        #################
         self._events_to_send.append(
             {"timestamp": self.time(),
              "event_type": "ExternalDecisionComponentHelloEvent",
@@ -406,153 +411,161 @@ class Batsim(object):
             else:
                 self.execute_job(job)
 
-
-    ### THINGS NOT UPDATED YET ####
-
-    # TODO: update with batprotocol?
-    def wake_me_up_at(self, time):
+    # Renamed from 'wake_me_up_at'
+    def call_me_later_once(self, call_me_later_id, call_time):
         self._events_to_send.append(
             {"timestamp": self.time(),
-             "event_type": "CALL_ME_LATER",
-             "event": {"timestamp": time}})
-
-    # TODO: update with batprotocol?
-    def notify_registration_finished(self):
-        self._events_to_send.append({
-            "timestamp": self.time(),
-            "event_type": "NOTIFY",
-            "event": {
-                    "type": "registration_finished",
+             "event_type": "CallMeLaterEvent",
+             "event": {
+                "call_me_later_id": call_me_later_id,
+                "when_type": "OneShot",
+                "when": {"time": call_time},
             }
         })
 
-    # TODO: update with batprotocol?
-    def notify_registration_continue(self):
-        self._events_to_send.append({
-            "timestamp": self.time(),
-            "event_type": "NOTIFY",
-            "event": {
-                    "type": "continue_registration",
+    # Periodic CallMeLaterEvent
+    # If nb_periods <= 0 then it is Infinite mode
+    def call_me_later_periodic(self, call_me_later_id, start_time,
+                               period_time, nb_periods):
+        when_dict = {"start_time": start_time,
+                     "period": period_time}
+
+        if nb_periods > 0:
+            when_dict["mode_type"]: "FinitePeriodNumber"
+            when_dict["mode"]: {"nb_periods": nb_periods}
+        else:
+            when_dict["mode_type"]: "Infinite"
+            when_dict["mode"]: {}
+
+        self._events_to_send.append(
+            {"timestamp": self.time(),
+             "event_type": "CallMeLaterEvent",
+             "event": {
+                "call_me_later_id": call_me_later_id,
+                "when_type": "Periodic",
+                "when": when_dict
             }
         })
 
-    # TODO: remove this?
-    def send_message_to_job(self, job, message):
-        self._events_to_send.append({
-            "timestamp": self.time(),
-            "event_type": "TO_JOB_MSG",
-            "event": {
-                    "job_id": job.job_id,
-                    "msg": message,
-            }
+    def stop_call_me_later(self, call_me_later_id):
+        self._events_to_send.append(
+            {"timestamp": self.time(),
+             "event_type": "StopCallMeLaterEvent",
+             "event": {"call_me_later_id": call_me_later_id}
         })
 
+    # Renamed from 'notify_registration_finished'
+    def finish_registration(self):
+        self._events_to_send.append({
+            "timestamp": self.time(),
+            "event_type": "FinishRegistrationEvent",
+            "event": {}
+        })
 
-    # TODO: update with batprotocol?
-    def reject_jobs_by_id(self, job_ids):
-        """ Reject the given jobs."""
+    def reject_job_by_id(self, job_id):
+        self._events_to_send.append({
+            "timestamp": self.time(),
+            "event_type": "RejectJobEvent",
+            "event": {
+                "job_id": job_id
+            }
+        })
+        self.jobs[job_id].job_state = Job.State.REJECTED # TODO: get rid of this?
+
+    def reject_jobs_by_ids(self, job_ids):
+        assert isinstance(job_ids, list), "A list of job ids must be provided to 'reject_jobs'"
         assert len(job_ids) > 0, "The list of jobs to reject is empty" #TODO: make is a logger.warning instead of an assert?
         for job_id in job_ids:
-            self._events_to_send.append({
-                "timestamp": self.time(),
-                "event_type": "REJECT_JOB",
-                "event": {
-                    "job_id": job_id
-                }
-            })
-            self.jobs[job_id].job_state = Job.State.REJECTED
+            self.reject_job_by_id(job_id)
 
-    # TODO: update with batprotocol?
-    def reject_jobs(self, jobs):
-        """Reject the given jobs."""
-        assert len(jobs) > 0, "The list of jobs to reject is empty" #TODO: make is a logger.warning instead of an assert?
-        job_ids = [x.id for x in jobs]
-        self.reject_jobs_by_id(job_ids)
-
-    # TODO: function still used?
-    def change_job_state(self, job, state):
-        """Change the state of a job."""
+    def kill_jobs_by_ids(self, job_ids):
+        assert isinstance(job_ids, list), "A list of job ids must be provided to 'kill_jobs'"
+        assert len(job_ids) > 0, "The list of jobs to kill is empty" #TODO: make is a logger.warning instead of an assert?
+        for job_id in job_ids:
+            self.jobs[job_id].job_state = Job.State.IN_KILLING #TODO: get rid of this?
         self._events_to_send.append({
             "timestamp": self.time(),
-            "event_type": "CHANGE_JOB_STATE",
+            "event_type": "KillJobsEvent",
             "event": {
-                    "job_id": job.job_id,
-                    "job_state": state.name,
-            }
-        })
-        self.jobs_manually_changed.add(job)
-
-    # TODO: update with batprotocol?
-    def kill_jobs(self, jobs):
-        """Kill the given jobs."""
-        assert len(jobs) > 0, "The list of jobs to kill is empty" #TODO: make is a logger.warning instead of an assert?
-        for job in jobs:
-            job.job_state = Job.State.IN_KILLING
-        self._events_to_send.append({
-            "timestamp": self.time(),
-            "event_type": "KILL_JOB",
-            "event": {
-                    "job_ids": [job.job_id for job in jobs],
+                    "job_ids": job_ids,
             }
         })
 
-    # TODO: update with batprotocol?
-    def register_profiles(self, workload_name, profiles):
-        for profile_name, profile in profiles.items():
-            msg = {
-                "timestamp": self.time(),
-                "event_type": "REGISTER_PROFILE",
-                "event": {
-                    "workload_name": workload_name,
-                    "profile_name": profile_name,
-                    "profile": profile,
-                }
-            }
-            self._events_to_send.append(msg)
-            if not workload_name in self.profiles:
-                self.profiles[workload_name] = {}
-                self.logger.debug("A new dynamic workload of name '{}' has been created".format(workload_name))
-            self.logger.debug("Registering profile: {}".format(msg["event"]))
-            self.profiles[workload_name][profile_name] = profile
-
-    # TODO: update with batprotocol?
-    def register_job(
-            self,
+    def register_job(self,
             job_id,
-            res,
             walltime,
-            profile_name,
-            subtime=None):
-        """ Returns the registered Job """
+            profile_id,
+            comp_res_request_type,
+            comp_res_request,
+            rigid,
+            subtime=None,
+            extra_data=''):
 
         if subtime is None:
             subtime = self.time()
+
         job_dict = {
-            "profile": profile_name,
-            "id": job_id,
-            "res": res,
             "walltime": walltime,
-            "subtime": subtime,
+            "computation_resource_request_type": comp_res_request_type,
+            "compupation_resource_request": {
+                ("core_number" if comp_res_request_type == ComputationResourceType.CoreNumber else "host_number"):
+                    comp_res_request
+            },
+            "profile_id": profile_id,
+            "extra_data": extra_data,
+            "rigid": rigid,
         }
-        msg = {
+
+        self._events_to_send.append({
             "timestamp": self.time(),
-            "event_type": "REGISTER_JOB",
+            "event_type": "RegisterJobEvent",
             "event": {
                 "job_id": job_id,
                 "job": job_dict,
             }
-        }
-        self._events_to_send.append(msg)
-        job = Job.from_json_dict(job_dict)
-        job.job_state = Job.State.IN_SUBMISSON
+        })
 
-        # Keep a pointer of the profile in the job structure
-        # TODO: remove these 2 lines?
-        #assert job.profile_id in self.profiles[job.workload]
-        #job.profile_dict = self.profiles[job.workload][job.profile_id]
-
+        job = Job.from_json_dict({
+            "job_id": job_id,
+            "submission_time": subtime,
+            "job": job_dict
+        })
+        job.job_state = Job.State.IN_SUBMISSON # TODO: get rid of this?
         self.jobs[job_id] = job
         return job
+
+
+    def register_profile(self,
+            workload_name,
+            profile_name,
+            profile_type,
+            profile_dict):
+    # It is the scheduler's job to provide a correct profile_dict
+    # depending on the profile_type given
+
+        profile_id = f"{workload_name}{WORKLOAD_JOB_SEPARATOR}{profile_name}"
+
+        tmp_dict = {
+            "id": profile_id,
+            "profile_type": profile_type,
+            "profile": profile_dict
+        }
+
+        self._events_to_send.append({
+            "timestamp": self.time(),
+            "event_type": "RegisterProfileEvent",
+            "event": { "profile": tmp_dict }
+        })
+
+        if not workload_name in self.profiles:
+            self.profiles[workload_name] = {}
+            self.logger.debug("A new dynamic workload of name '{}' has been created".format(workload_name))
+
+        self.profiles[workload_name][profile_id] = tmp_dict
+        self.logger.debug("Registering profile: {}".format(msg["event"]))
+
+
+    ### THINGS NOT UPDATED YET ####
 
     # TODO: Need to change the name. Resource pstates are changed
     def set_resource_state(self, resources, pstate):
@@ -568,6 +581,33 @@ class Batsim(object):
                     "state": str(state)
             }
         })
+
+    # TODO: remove this?
+    def send_message_to_job(self, job, message):
+        self._events_to_send.append({
+            "timestamp": self.time(),
+            "event_type": "TO_JOB_MSG",
+            "event": {
+                    "job_id": job.job_id,
+                    "msg": message,
+            }
+        })
+
+
+    # TODO: function still used?
+    def change_job_state(self, job, state):
+        """Change the state of a job."""
+        self._events_to_send.append({
+            "timestamp": self.time(),
+            "event_type": "CHANGE_JOB_STATE",
+            "event": {
+                    "job_id": job.job_id,
+                    "job_state": state.name,
+            }
+        })
+        self.jobs_manually_changed.add(job)
+
+
 
     # TODO: becomes related to probes?
     def request_consumed_energy(self):
@@ -705,12 +745,13 @@ class Job(object):
         self.rigid = rigid
         self.json_dict = json_dict
 
-        self.starting_time = None  # will be set when calling execute_job
-        self.finish_time = None  # will be set on completion by batsim
         self.job_state = Job.State.UNKNOWN
-        self.return_code = None
-        self.progress = None
-        self.allocation = None
+        self.allocation = None # Will be set when calling execute_job
+        self.starting_time = None  # will be set when calling execute_job
+        self.finish_time = None  # will be set on completion
+        self.return_code = None # Will be set on completion
+        self.kill_progress_type = None # Will be set in case of killing the job
+        self.kill_progress = None # Will be set in case of killing the job
 
     def __repr__(self):
         return (f"{{Job {self.job_id}, sub:{self.submit_time}, res:{self.requested_resources}"
@@ -827,9 +868,8 @@ class BatsimScheduler(object):
 
     def onBatsimHello(self):
         raise NotImplementedError()
-
-    def onBatsimHello(self):
-        self.answer_simulation_hello() # Answers with default values of SimulationContext
+        # The scheduler may modify the SimulationContext object (self.bs.simulation_context)
+        # and must call self.bs.answer_simulation_hello(<sched_name>, <sched_version>, [sched_commit]) to generate the answer event
 
     def onSimulationBegins(self):
         pass
@@ -865,7 +905,7 @@ class BatsimScheduler(object):
     def onRemoveResources(self, to_remove):
         raise NotImplementedError()
 
-    def onRequestedCall(self):
+    def onRequestedCall(self, call_me_later_id):
         raise NotImplementedError()
 
     def onNoMoreJobsInWorkloads(self):
