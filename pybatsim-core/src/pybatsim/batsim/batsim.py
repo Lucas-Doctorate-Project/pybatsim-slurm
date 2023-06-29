@@ -431,11 +431,13 @@ class Batsim(object):
                      "period": period_time}
 
         if nb_periods > 0:
-            when_dict["mode_type"]: "FinitePeriodNumber"
-            when_dict["mode"]: {"nb_periods": nb_periods}
+            when_dict["mode_type"] = "FinitePeriodNumber"
+            when_dict["mode"] = {"nb_periods": nb_periods}
         else:
-            when_dict["mode_type"]: "Infinite"
-            when_dict["mode"]: {}
+            when_dict["mode_type"] = "Infinite"
+            when_dict["mode"] = {}
+            self.logger.warning("Infinite periodic CallMeLater asked. "
+                        "The scheduler must send a StopCallMeLaterEvent to let Batsim end the simulation.")
 
         self._events_to_send.append(
             {"timestamp": self.time(),
