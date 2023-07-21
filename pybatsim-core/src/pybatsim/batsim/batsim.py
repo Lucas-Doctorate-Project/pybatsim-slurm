@@ -234,7 +234,7 @@ class Batsim(object):
                 self.scheduler.onMachinePStateChanged(machines, int(event_data["state"]))
 
             elif event_type == 'RequestedCallEvent':
-                self.scheduler.onRequestedCall(event_data["call_me_later_id"])
+                self.scheduler.onRequestedCall(event_data["call_me_later_id"], event_data["last_periodic_call"])
 
             elif event_type == 'AllStaticJobsHaveBeenSubmittedEvent':
                 self.no_more_static_jobs = True
@@ -324,7 +324,7 @@ class Batsim(object):
     def answer_simulation_hello(self, sched_name, sched_version, sched_commit=""):
         self._events_to_send.append(
             {"timestamp": self.time(),
-             "event_type": "ExternalDecisionComponentHelloEvent",
+             "event_type": "EDCHelloEvent",
              "event": {
                 "batprotocol_version": self.simulation_context.batprotocol_version, #TODO
                 "decision_component_name": sched_name,
@@ -464,6 +464,13 @@ class Batsim(object):
             "event": {}
         })
 
+    def force_simulation_stop(self):
+        self._events_to_send.append({
+            "timestamp": self.time(),
+            "event_type": "ForceSimulationStopEvent",
+            "event": {}
+        })
+
     def reject_job_by_id(self, job_id):
         self._events_to_send.append({
             "timestamp": self.time(),
@@ -497,7 +504,6 @@ class Batsim(object):
             job_id,
             walltime,
             profile_id,
-            comp_res_request_type,
             comp_res_request,
             rigid,
             subtime=None,
@@ -507,15 +513,11 @@ class Batsim(object):
             subtime = self.time()
 
         job_dict = {
+            "resource_request": comp_res_request,
             "walltime": walltime,
-            "computation_resource_request_type": comp_res_request_type,
-            "compupation_resource_request": {
-                ("core_number" if comp_res_request_type == ComputationResourceType.CoreNumber else "host_number"):
-                    comp_res_request
-            },
-            "profile_id": profile_id,
             "extra_data": extra_data,
             "rigid": rigid,
+            "profile_id": profile_id,
         }
 
         self._events_to_send.append({
@@ -724,27 +726,19 @@ class Job(object):
             self,
             job_id,
             subtime,
+            resource_req,
             walltime,
-            computation_resource_type,
-            computation_resource_req,
-            profile_id,
             extra_data,
             rigid,
+            profile_id,
             json_dict):
         self.job_id = job_id
         self.submit_time = subtime
+        self.requested_resources = resource_req
         self.requested_time = walltime
-        self.computation_resource_type = ComputationResourceType(computation_resource_type)
-        if computation_resource_type == ComputationResourceType.HostNumber:
-            self.requested_resources = computation_resource_req['host_number']
-        elif computation_resource_type == ComputationResourceType.CoreNumber:
-            self.requested_resources = computation_resource_req['core_number']
-        else:
-            self.requested_resources = None
-
-        self.profile_id = profile_id
         self.extra_data = extra_data
         self.rigid = rigid
+        self.profile_id = profile_id
         self.json_dict = json_dict
 
         self.job_state = Job.State.UNKNOWN
@@ -774,12 +768,11 @@ class Job(object):
     def from_json_dict(json_dict):
         return Job(json_dict["job_id"],
                    json_dict["submission_time"],
+                   json_dict["job"]["resource_request"],
                    json_dict["job"].get("walltime", -1),
-                   json_dict["job"]["computation_resource_request_type"],
-                   json_dict["job"]["computation_resource_request"],
-                   json_dict["job"]["profile_id"],
                    json_dict["job"]["extra_data"],
                    json_dict["job"]["rigid"],
+                   json_dict["job"]["profile_id"],
                    json_dict["job"])
 
 # Allocation object for the Batprotocol
@@ -818,16 +811,10 @@ class JobAllocation(object):
 
 
 # Enum for the Batprotocol
-class ValidationStrategy(str, Enum):
+class JobAllocValidationStrategy(str, Enum):
     NONE = "None"
     MatchJobRequestExactly = "MatchJobRequestExactly"
     MatchJobRequestBigEnough = "MatchJobRequestBigEnough"
-
-# Enum for the Batprotocol
-class ComputationResourceType(str, Enum):
-    NONE = "None"
-    CoreNumber = "CoreNumber"
-    HostNumber = "HostNumber"
 
 
 # Stores all simulation parameters and info passing in the Hello events
@@ -854,7 +841,7 @@ class SimulationContext(object):
         # Scheduling constraints
         self.compute_sharing = False
         self.storage_sharing = True
-        self.job_allocation_validation_strategy = ValidationStrategy.MatchJobRequestExactly
+        self.job_allocation_validation_strategy = JobAllocValidationStrategy.MatchJobRequestExactly
 
 
 
@@ -907,7 +894,7 @@ class BatsimScheduler(object):
     def onRemoveResources(self, to_remove):
         raise NotImplementedError()
 
-    def onRequestedCall(self, call_me_later_id):
+    def onRequestedCall(self, call_me_later_id, last_periodic_call):
         raise NotImplementedError()
 
     def onNoMoreJobsInWorkloads(self):
