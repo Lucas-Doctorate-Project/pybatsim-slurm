@@ -339,7 +339,7 @@ class EasyBackfill(BatsimScheduler):
     def allocFutureJob(self, first_job_res, first_job_starttime, current_time):
         """
         Update self.listFreeSpace to insert (if needed) 2 virtual free space.
-        These freespaces need to be removes afterwards Example: 3 machine
+        These freespaces need to be removed afterwards Example: 3 machine
         (A,B,C), 1 job running (1), the firstjob is 2
         A|
         B|     22
@@ -351,10 +351,10 @@ class EasyBackfill(BatsimScheduler):
         These 2 new FreeSpaces are "linked", in order to modify one freeSpace
         when the other is modified.
 
-        TODO: here we can optimise the code. The free sapces that we are
-        looking for are already been found in findAllocFuture(). BUT, in this
+        TODO: here we can optimise the code. The free spaces that we are
+        looking for have already been found in findAllocFuture(). BUT, in this
         function we find the FreeSpaces of listFreeSpaceTemp not
-        self.listFreeSpace; so a link should be made betweend these 2 things.
+        self.listFreeSpace; so a link should be made between these 2 things.
         """
         first_virtual_space = None
         first_shortened_space = None
@@ -383,6 +383,10 @@ class EasyBackfill(BatsimScheduler):
 
                 first_shortened_space = l
                 l.length = first_job_starttime - current_time
+
+			if l.first_res > first_job_res[0] and l.last_res < first_job_res[-1]:
+                l.length = first_job_starttime - current_time
+
 
             if l.last_res == first_job_res[-1]:
                 assert second_virtual_space is None and second_shortened_space is None
