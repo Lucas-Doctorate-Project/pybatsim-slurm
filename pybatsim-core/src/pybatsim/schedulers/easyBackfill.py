@@ -384,9 +384,8 @@ class EasyBackfill(BatsimScheduler):
                 first_shortened_space = l
                 l.length = first_job_starttime - current_time
 
-			if l.first_res > first_job_res[0] and l.last_res < first_job_res[-1]:
+            if l.first_res > first_job_res[0] and l.last_res < first_job_res[-1]:
                 l.length = first_job_starttime - current_time
-
 
             if l.last_res == first_job_res[-1]:
                 assert second_virtual_space is None and second_shortened_space is None
