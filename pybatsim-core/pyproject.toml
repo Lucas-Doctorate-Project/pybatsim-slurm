@@ -42,7 +42,7 @@ packages = [
 python = "^3.7.1"
 procset = "^1.0"
 sortedcontainers = "^2.4.0"
-pyzmq = ">=22.0.0"
+pyzmq = ">=23.0.0"
 importlib-metadata = {version = ">=3.6", python = "<3.10"}
 
 [tool.poetry.dev-dependencies]
@@ -60,4 +60,5 @@ fcfs-dvfs = "pybatsim.schedulers.fcfsWithDVFS:FcfsWithDVFS"
 fcfs-sleeper = "pybatsim.schedulers.fcfsSchedSleep:FcfsSchedSleep"
 filler = "pybatsim.schedulers.fillerSched:FillerSched"
 filler-events = "pybatsim.schedulers.fillerSchedWithEvents:FillerSchedWithEvents"
+filler-test = "pybatsim.schedulers.fillerSchedTest:FillerSchedTest"
 random = "pybatsim.schedulers.randomSched:RandomSched"

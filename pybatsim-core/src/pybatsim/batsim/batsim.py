@@ -70,9 +70,10 @@ class Batsim(object):
         job = Job.from_json_dict(event_data)
 
         if "profile" in event_data:
+            #TODO: update this with the Batprotocol
             profile = event_data["profile"]
         else:
-            profile = None # Changed from {}
+            profile = None
 
         return job, profile
 
@@ -125,10 +126,13 @@ class Batsim(object):
 
                 # TODO create Machine object?
                 self.compute_resources = {
-                        res["id"]: res for res in event_data["computation_hosts"]}
+                    res["id"]: res for res in event_data["computation_hosts"]
+                }
                 self.storage_resources = {
-                        res["id"]: res for res in event_data["storage_hosts"]}
+                    res["id"]: res for res in event_data["storage_hosts"]
+                }
 
+                # The list of arguments of the Batsim command line
                 self.batsim_arguments = event_data["batsim_arguments"]
                 self.batsim_execution_context = event_data["batsim_execution_context_json"]
 
@@ -136,8 +140,16 @@ class Batsim(object):
                     self.logger.warning("Dynamic registration of jobs is ENABLED. "
                         "The scheduler must send a FinishRegistrationEvent event to let Batsim end the simulation.")
 
-                self.workloads = event_data["workloads"]
-                self.profiles = event_data["profiles"]
+                self.workloads = {}
+                self.profiles = {}
+
+                for wl in event_data["workloads"]:
+                    self.workloads[wl["name"]] = wl
+                    self.profiles[wl["name"]] = {}
+
+                for prof in event_data["profiles"]:
+                    wl_id = prof["id"].split(Batsim.WORKLOAD_JOB_SEPARATOR)[0]
+                    self.profiles[wl_id][prof["id"]] = prof
 
                 self.scheduler.onSimulationBegins()
 
@@ -151,28 +163,25 @@ class Batsim(object):
             elif event_type == "JobSubmittedEvent":
                 # Received WORKLOAD_NAME!JOB_ID
                 job_id = event_data["job_id"]
+
+                # Retrieve job and profile from event
                 job, profile = self.get_job_and_profile(event_data)
+
+                if job_id in self.jobs:
+                    # This job comes from a Dynamic Registration, it already exist in self.jobs
+                    job = self.jobs[job_id]
+                else:
+                    self.jobs[job_id] = job
                 job.job_state = Job.State.SUBMITTED
 
                 # Store profile if not already present
+                #TODO: check this with batprotocol when profiles are forwarded upon job submission
                 if profile is not None:
                     if job.workload not in self.profiles: # Add the newly created workload
                         self.profiles[job.workload] = {}
                     if job.profile_id not in self.profiles[job.workload]: # Then add the profile
                         self.profiles[job.workload][job.profile_id] = profile
 
-                # Warning: override dynamic job but keep metadata
-                if job_id in self.jobs:
-                    self.logger.warn(
-                        "The job '{}' was alredy in the job list. "
-                        "Probaly a dynamic job that was submitted "
-                        "before: \nOld job: {}\nNew job: {}".format(
-                            job_id,
-                            self.jobs[job_id],
-                            job))
-                    # Keeping metadata and profile
-                    job.metadata = self.jobs[job_id].metadata
-                self.jobs[job_id] = job
 
                 # TODO: need to update it with Batprotocol
                 '''if (self.use_storage_controller) and (job.workload == "dyn-storage-controller"):
@@ -245,18 +254,6 @@ class Batsim(object):
 
             else: # Unknown Batsim event received
                 raise Exception(f"Unknown Batsim event type {event_type}")
-            # TODO: does not appear in the batprotocol
-            '''elif event_type == "FROM_JOB_MSG":
-                job_id = event_data["job_id"]
-                j = self.jobs[job_id]
-                timestamp = event["timestamp"]
-                msg = event_data["msg"]
-                self.scheduler.onJobMessage(timestamp, j, msg)'''
-            # TODO: does not appear in the batprotocol
-            '''elif event_type == "ANSWER":
-                if "consumed_energy" in event_data:
-                    consumed_energy = event_data["consumed_energy"]
-                    self.scheduler.onReportEnergyConsumed(consumed_energy)'''
             # TODO: does not appear in the batprotocol (yet)
             '''elif event_type == 'ADD_RESOURCES':
                 self.scheduler.onAddResources(ProcSet.from_str(event_data["resources"]))
@@ -400,35 +397,50 @@ class Batsim(object):
 
         self._events_to_send.append(message)
 
-    # TODO: update with batprotocol?
+
     def execute_jobs(self, jobs, io_jobs=None):
         """ jobs: list of jobs to execute
             job.allocation MUST be not None and a non-empty ProcSet
         """
         for job in jobs:
             if io_jobs is not None:
+                # TODO: update with batprotocol
                 self.execute_job(job, io_jobs[job.job_id])
             else:
                 self.execute_job(job)
 
     # Renamed from 'wake_me_up_at'
-    def call_me_later_once(self, call_me_later_id, call_time):
+    # 'call_time' MUST be an integer
+    # 'call'time' is expressed in Seconds, or Milliseconds if 'time_in_ms' is set to True
+    def call_me_later_once(self, call_me_later_id, call_time, time_in_ms=False):
+        # TODO: remove the assert and make it the users' responsibility to comply with the Batprotocol?
+        assert isinstance(call_time, int), f"call_time MUST be an integer (got {call_time})"
+
         self._events_to_send.append(
             {"timestamp": self.time(),
              "event_type": "CallMeLaterEvent",
              "event": {
                 "call_me_later_id": call_me_later_id,
                 "when_type": "OneShot",
-                "when": {"time": call_time},
+                "when": {
+                    "time": call_time,
+                    "time_unit": "Millisecond" if time_in_ms else "Second"
+                },
             }
         })
 
     # Periodic CallMeLaterEvent
+    # 'start_time' and 'period_time' MUST be integers
     # If nb_periods <= 0 then it is Infinite mode
     def call_me_later_periodic(self, call_me_later_id, start_time,
-                               period_time, nb_periods):
-        when_dict = {"start_time": start_time,
-                     "period": period_time}
+                               period_time, nb_periods, time_in_ms=False):
+        # TODO: remove the assert and make it the users' responsibility to comply with the Batprotocol?
+        assert isinstance(start_time, int), f"start_time MUST be an integer (got {start_time})"
+        assert isinstance(period_time, int), f"period_time MUST be an integer (got {period_time})"
+
+        when_dict = {"offset": start_time,
+                     "period": period_time,
+                     "time_unit": "Millisecond" if time_in_ms else "Second"}
 
         if nb_periods > 0:
             when_dict["mode_type"] = "FinitePeriodNumber"
@@ -502,15 +514,11 @@ class Batsim(object):
 
     def register_job(self,
             job_id,
-            walltime,
             profile_id,
+            walltime,
             comp_res_request,
             rigid,
-            subtime=None,
             extra_data=''):
-
-        if subtime is None:
-            subtime = self.time()
 
         job_dict = {
             "resource_request": comp_res_request,
@@ -531,11 +539,19 @@ class Batsim(object):
 
         job = Job.from_json_dict({
             "job_id": job_id,
-            "submission_time": subtime,
+            "submission_time": self.time(),
             "job": job_dict
         })
-        job.job_state = Job.State.IN_SUBMISSON # TODO: get rid of this?
+
+        if self.simulation_context.acknowledge_dynamic_jobs:
+            job.job_state = Job.State.IN_SUBMISSON # TODO: get rid of this?
+        else:
+            job.job_state = Job.State.SUBMITTED # TODO: get rid of this?
+
+        # Keep track of the job object
         self.jobs[job_id] = job
+
+        self.logger.debug(f"Registering job {job_id}")
         return job
 
 
@@ -547,7 +563,7 @@ class Batsim(object):
     # It is the scheduler's job to provide a correct profile_dict
     # depending on the profile_type given
 
-        profile_id = f"{workload_name}{WORKLOAD_JOB_SEPARATOR}{profile_name}"
+        profile_id = f"{workload_name}{Batsim.WORKLOAD_JOB_SEPARATOR}{profile_name}"
 
         tmp_dict = {
             "id": profile_id,
@@ -566,13 +582,13 @@ class Batsim(object):
             self.logger.debug("A new dynamic workload of name '{}' has been created".format(workload_name))
 
         self.profiles[workload_name][profile_id] = tmp_dict
-        self.logger.debug("Registering profile: {}".format(msg["event"]))
+        self.logger.debug(f"Registering profile {profile_id}")
 
 
     ### THINGS NOT UPDATED YET ####
 
     # TODO: Need to change the name. Resource pstates are changed
-    def set_resource_state(self, resources, pstate):
+    def change_resource_pstate(self, resources, pstate):
         """ args:resources: a ProcSet containing a list of resources.
             args:pstate: the pstate identifier configured in the platform specification.
         """
@@ -596,20 +612,6 @@ class Batsim(object):
                     "msg": message,
             }
         })
-
-
-    # TODO: function still used?
-    def change_job_state(self, job, state):
-        """Change the state of a job."""
-        self._events_to_send.append({
-            "timestamp": self.time(),
-            "event_type": "CHANGE_JOB_STATE",
-            "event": {
-                    "job_id": job.job_id,
-                    "job_state": state.name,
-            }
-        })
-        self.jobs_manually_changed.add(job)
 
 
 
@@ -650,7 +652,7 @@ class Batsim(object):
         )
 
     # TODO: function still used?
-    def set_job_metadata(self, job_id, metadata):
+    '''def set_job_metadata(self, job_id, metadata):
         self._events_to_send.append(
             {
                 "timestamp": self.time(),
@@ -661,7 +663,7 @@ class Batsim(object):
                 }
             }
         )
-        self.jobs[job_id].metadata = metadata
+        self.jobs[job_id].metadata = metadata'''
 
 
     def resubmit_job(self, job):
@@ -696,11 +698,14 @@ class Batsim(object):
 
         new_job = self.register_job(
                 new_job_name,
-                job.requested_resources,
+                job.profile_id,
                 job.requested_time,
-                job.profile_id)
+                job.requested_resources,
+                job.is_rigid,
+                job.extra_data)
 
-        self.set_job_metadata(new_job_name, metadata)
+        #self.set_job_metadata(new_job_name, metadata)
+        new_job.metadata = metadata
         return new_job
 
 ##################################################
