@@ -77,6 +77,14 @@ class Batsim(object):
 
         return job, profile
 
+    # Only add the profile if not already in self.profiles
+    def add_profile(self, profile):
+        workload_name = profile["id"].split(Batsim.WORKLOAD_JOB_SEPARATOR)[0]
+        if workload_name not in self.profiles:
+            self.profiles[workload_name] = {}
+        if profile["id"] not in self.profiles[workload_name]:
+            self.profiles[workload_name][profile["id"]] = profile
+
 
     def start(self):
         cont = True
@@ -147,9 +155,9 @@ class Batsim(object):
                     self.workloads[wl["name"]] = wl
                     self.profiles[wl["name"]] = {}
 
-                for prof in event_data["profiles"]:
-                    wl_id = prof["id"].split(Batsim.WORKLOAD_JOB_SEPARATOR)[0]
-                    self.profiles[wl_id][prof["id"]] = prof
+                if self.simulation_context.forward_profiles_on_simulation_begins:
+                    for prof in event_data["profiles"]:
+                        self.add_profile(prof)
 
                 self.scheduler.onSimulationBegins()
 
@@ -175,12 +183,8 @@ class Batsim(object):
                 job.job_state = Job.State.SUBMITTED
 
                 # Store profile if not already present
-                #TODO: check this with batprotocol when profiles are forwarded upon job submission
-                if profile is not None:
-                    if job.workload not in self.profiles: # Add the newly created workload
-                        self.profiles[job.workload] = {}
-                    if job.profile_id not in self.profiles[job.workload]: # Then add the profile
-                        self.profiles[job.workload][job.profile_id] = profile
+                if profile is not None: # This should only happen when forward_profiles_on_job_submission is set
+                    self.add_profile(profile)
 
 
                 # TODO: need to update it with Batprotocol
@@ -202,6 +206,10 @@ class Batsim(object):
                     j.job_state = Job.State.UNKNOWN
                 j.return_code = event_data["return_code"]
 
+                if j.job_state != Job.State.COMPLETED_KILLED:
+                    # Remove the Job from the dict
+                    del self.jobs[job_id]
+
                 # TODO: need to update it with Batprotocol
                 '''if (self.use_storage_controller) and (j.workload == "dyn-storage-controller"):
                     # This job comes from the Storage Controller
@@ -211,25 +219,19 @@ class Batsim(object):
                 self.scheduler.onJobCompletion(j)
 
             elif event_type == "JobsKilledEvent":
-                # get progress
                 killed_jobs = []
 
                 for d in event_data["progresses"]:
-                    j = self.jobs[d["job_id"]]
+                    #j = self.jobs[d["job_id"]]
+                    j = self.jobs.pop(d["job_id"])
                     j.kill_progress_type = d["wrapper"]["kill_progress_type"]
                     j.kill_progress = d["wrapper"]["kill_progress"]
                     killed_jobs.append(j)
 
-                '''for jid in event_data["job_ids"]:
-                    j = self.jobs[jid]
-                    ### TODO : Is this still possible with batprotocol?
-                    # The job_progress can only be empty if the job has completed
-                    # between the order of killing and the killing itself.
-                    # So in that case just dont put it in the killed jobs
-                    # because it was already marked as complete.
-                    if len(job_progresses) != 0:
-                        j.progress = job_progresses[jid]
-                        killed_jobs.append(j)'''
+                if self.simulation_context.forward_profiles_on_jobs_killed:
+                    # Include the forwarded profiles if not already here
+                    for profile in event_data["profiles"]:
+                        self.add_profile(profile)
 
                 if len(killed_jobs) != 0:
                     self.scheduler.onJobsKilled(killed_jobs)
@@ -491,7 +493,7 @@ class Batsim(object):
                 "job_id": job_id
             }
         })
-        self.jobs[job_id].job_state = Job.State.REJECTED # TODO: get rid of this?
+        #self.jobs[job_id].job_state = Job.State.REJECTED # TODO: get rid of this?
 
     def reject_jobs_by_ids(self, job_ids):
         assert isinstance(job_ids, list), "A list of job ids must be provided to 'reject_jobs'"
@@ -502,8 +504,8 @@ class Batsim(object):
     def kill_jobs_by_ids(self, job_ids):
         assert isinstance(job_ids, list), "A list of job ids must be provided to 'kill_jobs'"
         assert len(job_ids) > 0, "The list of jobs to kill is empty" #TODO: make is a logger.warning instead of an assert?
-        for job_id in job_ids:
-            self.jobs[job_id].job_state = Job.State.IN_KILLING #TODO: get rid of this?
+        #for job_id in job_ids:
+        #    self.jobs[job_id].job_state = Job.State.IN_KILLING #TODO: get rid of this?
         self._events_to_send.append({
             "timestamp": self.time(),
             "event_type": "KillJobsEvent",
@@ -523,10 +525,12 @@ class Batsim(object):
         job_dict = {
             "resource_request": comp_res_request,
             "walltime": walltime,
-            "extra_data": extra_data,
             "rigid": rigid,
             "profile_id": profile_id,
         }
+
+        if extra_data != '':
+            job_dict["extra_data"] = extra_data
 
         self._events_to_send.append({
             "timestamp": self.time(),
@@ -743,7 +747,6 @@ class Job(object):
         self.requested_time = walltime
         self.extra_data = extra_data
         self.rigid = rigid
-        self.profile_id = profile_id
         self.json_dict = json_dict
 
         self.job_state = Job.State.UNKNOWN
@@ -754,15 +757,18 @@ class Job(object):
         self.kill_progress_type = None # Will be set in case of killing the job
         self.kill_progress = None # Will be set in case of killing the job
 
+        self.workload = self.job_id.split(Batsim.WORKLOAD_JOB_SEPARATOR)[0]
+
+        if Batsim.WORKLOAD_JOB_SEPARATOR in profile_id:
+            self.profile_id = profile_id
+        else:
+            self.profile_id = f"{self.workload}{Batsim.WORKLOAD_JOB_SEPARATOR}{profile_id}"
+
     def __repr__(self):
         return (f"{{Job {self.job_id}, sub:{self.submit_time}, res:{self.requested_resources}"
                 f" ({self.computation_resource_type}), reqtime:{self.requested_time},"
                 f" profile: {self.profile_id}, state: {self.job_state},"
                 f" ret: {self.return_code}, alloc: {self.allocation}, extra: {self.extra_data}}}")
-
-    @property
-    def workload(self):
-        return self.job_id.split(Batsim.WORKLOAD_JOB_SEPARATOR)[0]
 
     @staticmethod
     def from_json_string(json_str):
@@ -775,7 +781,7 @@ class Job(object):
                    json_dict["submission_time"],
                    json_dict["job"]["resource_request"],
                    json_dict["job"].get("walltime", -1),
-                   json_dict["job"]["extra_data"],
+                   json_dict["job"].get("extra_data", ''),
                    json_dict["job"]["rigid"],
                    json_dict["job"]["profile_id"],
                    json_dict["job"])
