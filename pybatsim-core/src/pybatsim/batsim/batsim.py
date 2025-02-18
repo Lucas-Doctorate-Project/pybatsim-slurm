@@ -239,10 +239,9 @@ class Batsim(object):
             elif event_type == 'ProbeDataEmittedEvent':
                 raise Exception(f"Not implemented yet (event received: {event_type}")
 
-            # TODO: update with new batprotocol message related to psate change
-            elif event_type == "ResourcePstateChangedEvent":
-                machines = ProcSet.from_str(event_data["resources"])
-                self.scheduler.onMachinePStateChanged(machines, int(event_data["state"]))
+            elif event_type == "HostPStateChangedEvent":
+                machines = ProcSet.from_str(event_data["host_ids"])
+                self.scheduler.onHostPStateChanged(machines, int(event_data["pstate"]))
 
             elif event_type == 'RequestedCallEvent':
                 self.scheduler.onRequestedCall(event_data["call_me_later_id"], event_data["last_periodic_call"])
@@ -589,20 +588,17 @@ class Batsim(object):
         self.logger.debug(f"Registering profile {profile_id}")
 
 
-    ### THINGS NOT UPDATED YET ####
 
-    # TODO: Need to change the name. Resource pstates are changed
-    def change_resource_pstate(self, resources, pstate):
-        """ args:resources: a ProcSet containing a list of resources.
+    def change_host_pstate(self, host_ids, pstate):
+        """ args:host_ids: a ProcSet containing a list of host.
             args:pstate: the pstate identifier configured in the platform specification.
         """
-
         self._events_to_send.append({
             "timestamp": self.time(),
-            "event_type": "SET_RESOURCE_STATE",
+            "event_type": "ChangeHostPStateEvent",
             "event": {
-                    "resources": str(resources),
-                    "state": str(state)
+                    "host_ids": str(host_ids),
+                    "pstate": pstate
             }
         })
 
@@ -893,7 +889,7 @@ class BatsimScheduler(object):
     def onJobsKilled(self, jobs):
         raise NotImplementedError()
 
-    def onMachinePStateChanged(self, machines, pstate):
+    def onHostPStateChanged(self, machines, pstate):
         raise NotImplementedError()
 
     def onReportEnergyConsumed(self, consumed_energy):
