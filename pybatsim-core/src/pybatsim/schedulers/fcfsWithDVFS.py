@@ -18,13 +18,16 @@ from random import choice
 from procset import ProcSet
 from itertools import islice
 
-from pybatsim.batsim.batsim import BatsimScheduler
+from pybatsim.batsim.batsim import BatsimScheduler, JobAllocation
 
 
 class FcfsWithDVFS(BatsimScheduler):
     def __init__(self, options):
         super().__init__(options)
         self.logger.info("FCFS with DVFS init")
+
+    def onBatsimHello(self):
+        self.bs.answer_simulation_hello("FCFS", "0.1.0")
 
     def onSimulationBegins(self):
         self.nb_completed_jobs = 0
@@ -33,7 +36,7 @@ class FcfsWithDVFS(BatsimScheduler):
         
         self.DVFS_delay = 10 # Random DVFS decisions will be taken every 10 seconds
         self.wake_me_up = True
-        self.next_wake_up = 0.0
+        self.next_wake_up = 0
 
         self.do_scheduling = False # Only perform a scheduling round when needed
         self.open_jobs = []
@@ -44,7 +47,7 @@ class FcfsWithDVFS(BatsimScheduler):
 
         self.machines_pstates_list = {}
 
-        for machine_dict in self.bs.machines['compute']:
+        for machine_dict in self.bs.compute_resources.values():
             # Retrieve the number of pstates for each machine
             watts = machine_dict['properties']['wattage_per_state'].split(", ")
             pstates_list = list(range(len(watts)))
@@ -76,7 +79,7 @@ class FcfsWithDVFS(BatsimScheduler):
                 # Job fits now -> allocation
                 if nb_res_req <= len(self.idle_machines):
                     res = ProcSet(*islice(self.idle_machines, nb_res_req))
-                    job.allocation = res
+                    job.allocation = JobAllocation(res)
                     scheduled_jobs.append(job)
 
                     self.computing_machines |= res
@@ -97,21 +100,21 @@ class FcfsWithDVFS(BatsimScheduler):
             self.logger.info("There is no job to schedule right now")
 
 
-    def onJobSubmission(self, job):
+    def onJobSubmitted(self, job):
         if job.requested_resources > self.bs.nb_compute_resources:
             self.bs.reject_jobs([job]) # This job requests more resources than the machine has
         else:
             self.open_jobs.append(job)
             self.do_scheduling = True
 
-    def onJobCompletion(self, job):
-        self.idle_machines |= job.allocation
-        self.computing_machines -= job.allocation
+    def onJobCompleted(self, job):
+        self.idle_machines |= job.allocation.host_alloc
+        self.computing_machines -= job.allocation.host_alloc
 
         self.nb_running_jobs -= 1
         self.do_scheduling = True
 
-    def onRequestedCall(self):
+    def onRequestedCall(self, call_id, last_call):
         self.do_DVFS()
 
     def do_DVFS(self):
@@ -119,9 +122,9 @@ class FcfsWithDVFS(BatsimScheduler):
 
         for r in self.computing_machines:
             new_pstate = choice(self.machines_pstates_list[r])
-            self.bs.set_resource_state(r, new_pstate)
+            self.bs.change_host_pstate(r, new_pstate)
 
-    def onMachinePStateChanged(self, machines, pstate):
+    def onHostPStateChanged(self, machines, pstate):
         pass
 
 
@@ -134,5 +137,5 @@ class FcfsWithDVFS(BatsimScheduler):
             # If jobs are running or more jobs are expected, ask for a wake up for DVFS
             if not self.bs.no_more_static_jobs or (self.nb_running_jobs > 0):
                 self.next_wake_up += self.DVFS_delay
-                self.bs.wake_me_up_at(self.next_wake_up)
+                self.bs.call_me_later_once("wake_me_up", self.next_wake_up)
 

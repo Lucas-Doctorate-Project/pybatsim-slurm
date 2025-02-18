@@ -77,6 +77,12 @@ class Batsim(object):
 
         return job, profile
 
+    def get_properties_dict(self, properties_list):
+        properties_dict = {}
+        for d in properties_list:
+            properties_dict[d['key']] = d['value']
+        return properties_dict
+
     # Only add the profile if not already in self.profiles
     def add_profile(self, profile):
         workload_name = profile["id"].split(Batsim.WORKLOAD_JOB_SEPARATOR)[0]
@@ -132,13 +138,20 @@ class Batsim(object):
                 self.nb_compute_resources = event_data["computation_host_number"]
                 self.nb_storage_resources = event_data["storage_host_number"]
 
-                # TODO create Machine object?
-                self.compute_resources = {
-                    res["id"]: res for res in event_data["computation_hosts"]
-                }
-                self.storage_resources = {
-                    res["id"]: res for res in event_data["storage_hosts"]
-                }
+                # TODO create Machine python object?
+                self.compute_resources = {}
+                for res in event_data["computation_hosts"]:
+                    res["properties"] = self.get_properties_dict(res["properties"])
+                    res["zone_properties"] = self.get_properties_dict(res["zone_properties"])
+
+                    self.compute_resources[res["id"]] = res
+
+                self.storage_resources = {}
+                for res in event_data["storage_hosts"]:
+                    res["properties"] = self.get_properties_dict(res["properties"])
+                    res["zone_properties"] = self.get_properties_dict(res["zone_properties"])
+
+                    self.storage_resources[res["id"]] = res
 
                 # The list of arguments of the Batsim command line
                 self.batsim_arguments = event_data["batsim_arguments"]
@@ -164,7 +177,6 @@ class Batsim(object):
             elif event_type == "SimulationEndsEvent":
                 assert self.running_simulation, "No simulation is currently running"
                 self.running_simulation = False
-                #self.logger.info("All jobs have been submitted and completed!")
                 simu_ends_received = True
                 self.scheduler.onSimulationEnds()
 
@@ -192,8 +204,8 @@ class Batsim(object):
                     # This job comes from the StorageController, it's just an ack so forget about it
                     pass
                 else:
-                    self.scheduler.onJobSubmission(job)'''
-                self.scheduler.onJobSubmission(job)
+                    self.scheduler.onJobSubmitted(job)'''
+                self.scheduler.onJobSubmitted(job)
 
             elif event_type == "JobCompletedEvent":
                 job_id = event_data["job_id"]
@@ -215,14 +227,13 @@ class Batsim(object):
                     # This job comes from the Storage Controller
                     self.storage_controller.data_staging_completed(j)
                 else:
-                    self.scheduler.onJobCompletion(j)'''
-                self.scheduler.onJobCompletion(j)
+                    self.scheduler.onJobCompleted(j)'''
+                self.scheduler.onJobCompleted(j)
 
             elif event_type == "JobsKilledEvent":
                 killed_jobs = []
 
                 for d in event_data["progresses"]:
-                    #j = self.jobs[d["job_id"]]
                     j = self.jobs.pop(d["job_id"])
                     j.kill_progress_type = d["wrapper"]["kill_progress_type"]
                     j.kill_progress = d["wrapper"]["kill_progress"]
@@ -248,10 +259,10 @@ class Batsim(object):
 
             elif event_type == 'AllStaticJobsHaveBeenSubmittedEvent':
                 self.no_more_static_jobs = True
-                self.scheduler.onNoMoreJobsInWorkloads()
+                self.scheduler.onAllStaticJobsHaveBeenSubmitted()
             elif event_type == 'AllStaticExternalEventsHaveBeenInjectedEvent':
                 self.no_more_external_events = True
-                self.scheduler.onNoMoreExternalEvents()
+                self.scheduler.onAllStaticExternalEventsHaveBeenInjected()
 
             else: # Unknown Batsim event received
                 raise Exception(f"Unknown Batsim event type {event_type}")
@@ -546,11 +557,6 @@ class Batsim(object):
             "job": job_dict
         })
 
-        if self.simulation_context.acknowledge_dynamic_jobs:
-            job.job_state = Job.State.IN_SUBMISSON # TODO: get rid of this?
-        else:
-            job.job_state = Job.State.SUBMITTED # TODO: get rid of this?
-
         # Keep track of the job object
         self.jobs[job_id] = job
 
@@ -563,8 +569,8 @@ class Batsim(object):
             profile_name,
             profile_type,
             profile_dict):
-    # It is the scheduler's job to provide a correct profile_dict
-    # depending on the profile_type given
+        # It is the scheduler's job to provide a correct profile_dict
+        # depending on the profile_type given
 
         profile_id = f"{workload_name}{Batsim.WORKLOAD_JOB_SEPARATOR}{profile_name}"
 
@@ -602,68 +608,71 @@ class Batsim(object):
             }
         })
 
+
+    ### THINGS NOT UPDATED YET ####
+
     # TODO: remove this?
-    def send_message_to_job(self, job, message):
-        self._events_to_send.append({
-            "timestamp": self.time(),
-            "event_type": "TO_JOB_MSG",
-            "event": {
-                    "job_id": job.job_id,
-                    "msg": message,
-            }
-        })
+    # def send_message_to_job(self, job, message):
+    #     self._events_to_send.append({
+    #         "timestamp": self.time(),
+    #         "event_type": "TO_JOB_MSG",
+    #         "event": {
+    #                 "job_id": job.job_id,
+    #                 "msg": message,
+    #         }
+    #     })
 
 
 
     # TODO: becomes related to probes?
-    def request_consumed_energy(self):
-        self._events_to_send.append(
-            {
-                "timestamp": self.time(),
-                "event_type": "QUERY",
-                "event": {
-                    "requests": {"consumed_energy": {}}
-                }
-            }
-        )
+    # def request_consumed_energy(self):
+    #     self._events_to_send.append(
+    #         {
+    #             "timestamp": self.time(),
+    #             "event_type": "QUERY",
+    #             "event": {
+    #                 "requests": {"consumed_energy": {}}
+    #             }
+    #         }
+    #     )
 
     # TODO: function still used? (related to Bebida?)
-    def notify_resources_added(self, resources):
-        self._events_to_send.append(
-            {
-                "timestamp": self.time(),
-                "event_type": "RESOURCES_ADDED",
-                "event": {
-                    "resources": str(resources)
-                }
-            }
-        )
+    # def notify_resources_added(self, resources):
+    #     self._events_to_send.append(
+    #         {
+    #             "timestamp": self.time(),
+    #             "event_type": "RESOURCES_ADDED",
+    #             "event": {
+    #                 "resources": str(resources)
+    #             }
+    #         }
+    #     )
 
     # TODO: function still used? (related to Bebida?)
-    def notify_resources_removed(self, resources):
-        self._events_to_send.append(
-            {
-                "timestamp": self.time(),
-                "event_type": "RESOURCES_REMOVED",
-                "event": {
-                    "resources": str(resources)
-                }
-            }
-        )
+    # def notify_resources_removed(self, resources):
+    #     self._events_to_send.append(
+    #         {
+    #             "timestamp": self.time(),
+    #             "event_type": "RESOURCES_REMOVED",
+    #             "event": {
+    #                 "resources": str(resources)
+    #             }
+    #         }
+    #     )
 
     # TODO: function still used?
-    '''def set_job_metadata(self, job_id, metadata):
-        self._events_to_send.append(
-            {
-                "timestamp": self.time(),
-                "event_type": "SET_JOB_METADATA",
-                "event": {
-                    "job_id": str(job_id),
-                    "metadata": str(metadata)
-                }
-            }
-        )
-        self.jobs[job_id].metadata = metadata'''
+    # def set_job_metadata(self, job_id, metadata):
+    #     self._events_to_send.append(
+    #         {
+    #             "timestamp": self.time(),
+    #             "event_type": "SET_JOB_METADATA",
+    #             "event": {
+    #                 "job_id": str(job_id),
+    #                 "metadata": str(metadata)
+    #             }
+    #         }
+    #     )
+    #     self.jobs[job_id].metadata = metadata
 
 
     def resubmit_job(self, job):
@@ -762,7 +771,7 @@ class Job(object):
 
     def __repr__(self):
         return (f"{{Job {self.job_id}, sub:{self.submit_time}, res:{self.requested_resources}"
-                f" ({self.computation_resource_type}), reqtime:{self.requested_time},"
+                f" reqtime:{self.requested_time},"
                 f" profile: {self.profile_id}, state: {self.job_state},"
                 f" ret: {self.return_code}, alloc: {self.allocation}, extra: {self.extra_data}}}")
 
@@ -795,8 +804,8 @@ class JobAllocation(object):
     def __init__(
             self,
             host_alloc,
-            placement_type,
-            placement_arg,
+            placement_type = ExecutorPlacementType.PredefinedExecutorPlacementStrategyWrapper,
+            placement_arg = ExecutorPlacementStrategy.SpreadOverHostsFirst,
             profile_alloc_override = [],
             storage_placement = []
         ):
@@ -877,10 +886,10 @@ class BatsimScheduler(object):
         raise ValueError(
             "[PYBATSIM]: Batsim is not responding (maybe deadlocked)")
 
-    def onJobSubmission(self, job):
+    def onJobSubmitted(self, job):
         raise NotImplementedError()
 
-    def onJobCompletion(self, job):
+    def onJobCompleted(self, job):
         raise NotImplementedError()
 
     def onJobMessage(self, timestamp, job, message):
@@ -892,22 +901,19 @@ class BatsimScheduler(object):
     def onHostPStateChanged(self, machines, pstate):
         raise NotImplementedError()
 
-    def onReportEnergyConsumed(self, consumed_energy):
-        raise NotImplementedError()
+    # def onAddResources(self, to_add):
+    #     raise NotImplementedError()
 
-    def onAddResources(self, to_add):
-        raise NotImplementedError()
-
-    def onRemoveResources(self, to_remove):
-        raise NotImplementedError()
+    # def onRemoveResources(self, to_remove):
+    #     raise NotImplementedError()
 
     def onRequestedCall(self, call_me_later_id, last_periodic_call):
         raise NotImplementedError()
 
-    def onNoMoreJobsInWorkloads(self):
-        self.logger.info("There is no more static jobs in the workload")
+    def onAllStaticJobsHaveBeenSubmitted(self):
+        self.logger.info("There is no more static jobs in the workload(s)")
 
-    def onNoMoreExternalEvents(self):
+    def onAllStaticExternalEventsHaveBeenInjected(self):
         self.logger.info("There is no more external events to occur")
 
     def onNotifyEventMachineUnavailable(self, machines):

@@ -18,10 +18,6 @@ class FillerSched(BatsimScheduler):
         #pass # Do nothing
 
     def onBatsimHello(self):
-        # Ask for the forwarding of profiles on job submission
-        # TODO not implemented yet on Batsim side
-        #self.bs.simulation_context.forward_profiles_on_job_submission = True
-
         self.bs.answer_simulation_hello("FillerSched", "0.1.0")
 
     def onSimulationBegins(self):
@@ -71,13 +67,13 @@ class FillerSched(BatsimScheduler):
         print('available = ', self.availableResources)
         print('')
 
-    def onJobSubmission(self, job):
+    def onJobSubmitted(self, job):
         if job.requested_resources > self.bs.nb_compute_resources:
             self.bs.reject_jobs([job]) # This job requests more resources than the machine has
         else:
             self.openJobs.add(job)
 
-    def onJobCompletion(self, job):
+    def onJobCompleted(self, job):
         self.availableResources |= job.allocation.host_alloc
 
     def onNoMoreEvents(self):

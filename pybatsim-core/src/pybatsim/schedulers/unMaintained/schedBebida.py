@@ -25,7 +25,7 @@ from itertools import islice
 
 from procset import ProcInt, ProcSet
 
-from pybatsim.batsim.batsim import BatsimScheduler, Job
+from pybatsim.batsim.batsim import BatsimScheduler, Job, JobAllocation
 
 
 def sort_by_id(jobs):

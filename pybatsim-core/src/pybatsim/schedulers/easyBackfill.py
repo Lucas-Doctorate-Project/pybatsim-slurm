@@ -6,7 +6,7 @@ This scheduler consider job as rectangle.
 from procset import ProcSet
 from sortedcontainers import SortedListWithKey
 
-from pybatsim.batsim.batsim import BatsimScheduler
+from pybatsim.batsim.batsim import BatsimScheduler, JobAllocation
 
 
 INFINITY = float('inf')
@@ -240,14 +240,17 @@ class EasyBackfill(BatsimScheduler):
     An EASY backfill scheduler that schedule rectangles.
     """
 
-    def onAfterBatsimInit(self):
-        self.listFreeSpace = FreeSpaceContainer(self.bs.nb_resources)
+    def onBatsimHello(self):
+        self.bs.answer_simulation_hello("EASY-Backfill", "0.1.0")
+
+    def onSimulationBegins(self):
+        self.listFreeSpace = FreeSpaceContainer(self.bs.nb_compute_resources)
 
         self.listRunningJob = SortedListWithKey(
             key=lambda job: job.estimate_finish_time)
         self.listWaitingJob = []
 
-    def onJobSubmission(self, just_submitted_job):
+    def onJobSubmitted(self, just_submitted_job):
         if just_submitted_job.requested_resources > self.bs.nb_compute_resources:
             self.bs.reject_jobs([just_submitted_job]) # This job requests more resources than the machine has
         else:
@@ -257,7 +260,7 @@ class EasyBackfill(BatsimScheduler):
             # just_submitted_job.requested_resources):
             self._schedule_jobs(current_time)
 
-    def onJobCompletion(self, job):
+    def onJobCompleted(self, job):
         current_time = self.bs.time()
 
         self.listFreeSpace.unassignJob(job)
@@ -286,7 +289,7 @@ class EasyBackfill(BatsimScheduler):
         if len(allocs) > 0:
             jobs = []
             for (job, (first_res, last_res)) in allocs:
-                job.allocation = ProcSet((first_res, last_res))
+                job.allocation = JobAllocation(ProcSet((first_res, last_res)))
                 jobs.append(job)
             self.bs.execute_jobs(jobs)
 

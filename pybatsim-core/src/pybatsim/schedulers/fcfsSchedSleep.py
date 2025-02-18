@@ -140,19 +140,19 @@ class FcfsSchedSleep(BatsimScheduler):
         for (val, (r1,r2)) in pstates_to_change:
             self.bs.set_resource_state(ProcSet(r1), val)
 
-    def onJobSubmission(self, job):
+    def onJobSubmitted(self, job):
         if job.requested_resources > self.bs.nb_compute_resources:
             self.bs.reject_jobs([job]) # This job requests more resources than the machine has
         else:
             self.open_jobs.append(job)
 
-    def onJobCompletion(self, job):
+    def onJobCompleted(self, job):
         for res in job.allocation:
             self.idle_machines.add(res)
             self.computing_machines.remove(res)
             self.machines_states[res] = State.Idle.value
 
-    def onMachinePStateChanged(self, machines, new_pstate):
+    def onHostPStateChanged(self, machines, new_pstate):
         machine = machines[0]
         if (new_pstate == int(PState.ComputeFast.value)):  # switched to a compute pstate
             if self.machines_states[machine] == State.SwitchingON.value:

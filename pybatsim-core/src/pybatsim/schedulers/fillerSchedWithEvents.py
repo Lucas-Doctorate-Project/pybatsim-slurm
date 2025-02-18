@@ -54,13 +54,13 @@ class FillerSchedWithEvents(BatsimScheduler):
         #print('available = ', self.availableResources)
         #print('')
 
-    def onJobSubmission(self, job):
+    def onJobSubmitted(self, job):
         if job.requested_resources > self.bs.nb_compute_resources:
             self.bs.reject_jobs([job]) # This job requests more resources than the machine has
         else:
             self.openJobs.add(job)
 
-    def onJobCompletion(self, job):
+    def onJobCompleted(self, job):
         # Resources used by the job and that are unavailable should not be added to available resources
         p = job.allocation - self.unavailableResources
         self.availableResources |= p
@@ -78,7 +78,7 @@ class FillerSchedWithEvents(BatsimScheduler):
     def onNotifyGenericEvent(self, event_data):
         pass
 
-    def onNoMoreExternalEvents(self):
+    def onAllStaticExternalEventsHaveBeenInjected(self):
         # There are no more external event, reject the jobs that cannot be scheduled due to lack of available resources
         nb_max_available_resources = self.bs.nb_compute_resources - len(self.unavailableResources)
         jobs_to_reject = []

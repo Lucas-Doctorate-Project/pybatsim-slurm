@@ -13,13 +13,16 @@ This scheduler is a simple FCFS:
 from procset import ProcSet
 from itertools import islice
 
-from pybatsim.batsim.batsim import BatsimScheduler
+from pybatsim.batsim.batsim import BatsimScheduler, JobAllocation
 
 
 class Fcfs(BatsimScheduler):
     def __init__(self, options):
         super().__init__(options)
         self.logger.info("FCFS init")
+
+    def onBatsimHello(self):
+        self.bs.answer_simulation_hello("FCFS", "0.1.0")
 
     def onSimulationBegins(self):
         self.nb_completed_jobs = 0
@@ -51,7 +54,7 @@ class Fcfs(BatsimScheduler):
                 # Job fits now -> allocation
                 if nb_res_req <= len(self.idle_machines):
                     res = ProcSet(*islice(self.idle_machines, nb_res_req))
-                    job.allocation = res
+                    job.allocation = JobAllocation(res)
                     scheduled_jobs.append(job)
 
                     self.computing_machines |= res
@@ -71,15 +74,15 @@ class Fcfs(BatsimScheduler):
             self.logger.info("There is no job to schedule right now")
 
 
-    def onJobSubmission(self, job):
+    def onJobSubmitted(self, job):
         if job.requested_resources > self.bs.nb_compute_resources:
             self.bs.reject_jobs([job]) # This job requests more resources than the machine has
         else:
             self.open_jobs.append(job)
 
-    def onJobCompletion(self, job):
-        self.idle_machines |= job.allocation
-        self.computing_machines -= job.allocation
+    def onJobCompleted(self, job):
+        self.idle_machines |= job.allocation.host_alloc
+        self.computing_machines -= job.allocation.host_alloc
 
     def onNoMoreEvents(self):
         self.scheduleJobs()
