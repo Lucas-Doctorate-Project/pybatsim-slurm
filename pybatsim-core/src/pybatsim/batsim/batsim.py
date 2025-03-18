@@ -529,13 +529,11 @@ class Batsim(object):
             profile_id,
             walltime,
             comp_res_request,
-            rigid,
             extra_data=''):
 
         job_dict = {
             "resource_request": comp_res_request,
             "walltime": walltime,
-            "rigid": rigid,
             "profile_id": profile_id,
         }
 
@@ -710,7 +708,6 @@ class Batsim(object):
                 job.profile_id,
                 job.requested_time,
                 job.requested_resources,
-                job.is_rigid,
                 job.extra_data)
 
         #self.set_job_metadata(new_job_name, metadata)
@@ -743,7 +740,6 @@ class Job(object):
             resource_req,
             walltime,
             extra_data,
-            rigid,
             profile_id,
             json_dict):
         self.job_id = job_id
@@ -751,7 +747,6 @@ class Job(object):
         self.requested_resources = resource_req
         self.requested_time = walltime
         self.extra_data = extra_data
-        self.rigid = rigid
         self.json_dict = json_dict
 
         self.job_state = Job.State.UNKNOWN
@@ -787,7 +782,6 @@ class Job(object):
                    json_dict["job"]["resource_request"],
                    json_dict["job"].get("walltime", -1),
                    json_dict["job"].get("extra_data", ''),
-                   json_dict["job"]["rigid"],
                    json_dict["job"]["profile_id"],
                    json_dict["job"])
 
