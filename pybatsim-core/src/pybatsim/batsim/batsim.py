@@ -257,6 +257,9 @@ class Batsim(object):
             elif event_type == 'RequestedCallEvent':
                 self.scheduler.onRequestedCall(event_data["call_me_later_id"], event_data["last_periodic_call"])
 
+            elif event_type == 'ExternalEventOccurredEvent':
+                self.scheduler.onExternalEventOccurred(event_data["external_event_type"], event_data["external_event"])
+
             elif event_type == 'AllStaticJobsHaveBeenSubmittedEvent':
                 self.no_more_static_jobs = True
                 self.scheduler.onAllStaticJobsHaveBeenSubmitted()
@@ -910,13 +913,7 @@ class BatsimScheduler(object):
     def onAllStaticExternalEventsHaveBeenInjected(self):
         self.logger.info("There is no more external events to occur")
 
-    def onNotifyEventMachineUnavailable(self, machines):
-        raise NotImplementedError()
-
-    def onNotifyEventMachineAvailable(self, machines):
-        raise NotImplementedError()
-
-    def onNotifyGenericEvent(self, event_data):
+    def onExternalEventOccurredEvent(self, event_type, event_data):
         raise NotImplementedError()
 
     # TODO: need to update it with Batprotocol
