@@ -14,33 +14,14 @@ import logging
 import sys
 import textwrap
 import time
+import importlib.util
+
+from pathlib import Path
 
 from pybatsim import __version__
 from pybatsim.batsim.batsim import Batsim
 from pybatsim.plugin import (SCHEDULER_ENTRY_POINT, find_ambiguous_scheduler_names,
     find_plugin_schedulers)
-
-
-# TODO: relocate under scheduler module?
-def find_scheduler_class(name):
-    """Lookup a scheduler by name. Return None if not found."""
-    for found_name, cls in find_plugin_schedulers():
-        if name == found_name:
-            return cls
-    return None
-
-
-# TODO: relocate under scheduler module?
-def get_scheduler_by_name(name, *, options):
-    """Return an instantiated scheduler.
-
-    Options are passed to the scheduler initializer.
-    Raises if not found.
-    """
-    cls = find_scheduler_class(name)
-    if cls is None:
-        raise ValueError(f'Unknown scheduler name: {name}')
-    return cls(options)
 
 
 class _JsonStoreAction(argparse.Action):
@@ -153,12 +134,6 @@ def _build_parser():
         metavar='ADDRESS',
     )
     parser.add_argument(
-        '-e', '--event-socket-endpoint',
-        help='address of scheduler-published events socket, '
-             'formatted as \'protocol://interface:port\'',
-        metavar='ADDRESS',
-    )
-    parser.add_argument(
         '-o', '--scheduler-options',
         default={},
         action=_JsonStoreAction,
@@ -167,14 +142,21 @@ def _build_parser():
              'or a @-prefixed JSON file containing the options (e.g., \'@options.json\')',
         metavar='[@]OPTIONS',
     )
-    parser.add_argument(
-        'scheduler',
-        choices=sorted(set(name for name, _ in find_plugin_schedulers())),
-        metavar='scheduler',
-        help='name of the scheduler to run '
-             f'(as registered under \'{SCHEDULER_ENTRY_POINT}\' entry point)',
-    )
 
+    parser.add_argument(
+        'edc_name',
+        #choices=sorted(set(name for name, _ in find_plugin_schedulers())),
+        metavar='EDC_name',
+        help='name of the External Decision Component (EDC) to run.\n'
+             f'If no second argument is provided, this should match a name registered under \'{SCHEDULER_ENTRY_POINT}\' entry point. '
+             f'If a filename is provided as second argument, this should match the class name of the EDC.'
+    )
+    parser.add_argument(
+        'filename',
+        default=None,
+        type=Path,
+        nargs='?',
+        help='(optional) path to the file containing the EDC.')
     return parser
 
 
@@ -189,39 +171,20 @@ def _abort_on_ambiguous_scheduler_name(name, *, parser):
         errmsg += ', '.join(ambiguous_names[name])
         parser.error(errmsg)
 
+def _find_scheduler_class(name):
+    """Lookup a scheduler by name. Return None if not found."""
+    for found_name, cls in find_plugin_schedulers():
+        if name == found_name:
+            return cls
+    raise ValueError(f'Unknown scheduler name: {name}')
 
-def run_simulation(scheduler, *, socket_endpoint, event_socket_endpoint, timeout):
-    """Instantiate the connection to Batsim and run the simulation."""
-    batsim = Batsim(
-        scheduler,
-        network_endpoint=socket_endpoint,
-        event_endpoint=event_socket_endpoint,
-        timeout=timeout
-    )
-
-    tstart = time.perf_counter_ns()  # clock of highest resolution
-    batsim.start()
-    tend = time.perf_counter_ns()
-
-    logging.info(f'Simulation ran {(tend - tstart) * 1e-9:e} seconds (elapsed real time)')
-    logging.info(
-        'jobs: ' +
-        ', '.join((
-            f'{batsim.nb_jobs_submitted} submitted',
-            f'{batsim.nb_jobs_scheduled} scheduled',
-            f'{batsim.nb_jobs_rejected} rejected',
-            f'{batsim.nb_jobs_killed} killed',
-            f'{len(batsim.jobs_manually_changed)} changed',
-            f'{batsim.nb_jobs_timeout} timeout',
-            f'{batsim.nb_jobs_successful} success',
-            f'{batsim.nb_jobs_completed} complete',
-        ))
-    )
-
-    # TODO: deport check to Batsim class
-    if batsim.nb_jobs_submitted != \
-       batsim.nb_jobs_scheduled + batsim.nb_jobs_rejected + len(batsim.jobs_manually_changed):
-        sys.exit(1)
+def _import_EDC_from_path(EDC_name, file_path):
+    # Found here: https://docs.python.org/3/library/importlib.html#importing-a-source-file-directly
+    spec = importlib.util.spec_from_file_location(EDC_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[EDC_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def main(args=None):
@@ -232,14 +195,40 @@ def main(args=None):
     arguments = parser.parse_args(args)
     logging.debug(f'parsed arguments: {vars(arguments)}')
 
-    # instantiate scheduler
-    _abort_on_ambiguous_scheduler_name(arguments.scheduler, parser=parser)
-    scheduler = get_scheduler_by_name(arguments.scheduler, options=arguments.scheduler_options)
+    if arguments.filename is None:
+        # EDC must exist in the Entrypoint
+        sched_list = sorted(set(name for name, _ in find_plugin_schedulers()))
+        if arguments.edc_name not in sched_list:
+            raise ValueError(f'Invalid EDC_name: {arguments.edc_name} (choose from {sched_list})')
 
-    # launch simulation
-    run_simulation(
-        scheduler=scheduler,
-        socket_endpoint=arguments.socket_endpoint,
-        event_socket_endpoint=arguments.event_socket_endpoint,
-        timeout=arguments.timeout,
-    )
+        _abort_on_ambiguous_scheduler_name(arguments.scheduler, parser=parser)
+    else:
+        pass
+        if not arguments.filename.is_file():
+            raise ValueError(f'Invalid file name: {arguments.filename} does not exist')
+
+        # else need to check that EDC exists in module provided by the filename
+        EDC_module = _import_EDC_from_path("EDC_module", arguments.filename)
+        if not hasattr(EDC_module, arguments.edc_name):
+            raise ValueError(f'Invalid EDC_name: {arguments.edc_name} not found in specified file {arguments.filename}')
+
+    '''
+    with Batsim(arguments.socket_endpoint, arguments.timeout) as batsim:
+        if arguments.filename is None:
+            edc_cls = _find_scheduler_class(arguments.edc_name)
+        else:
+            edc_cls = getattr(EDC_module, arguments.edc_name)
+
+        edc = edc_cls(batsim.simulation_context, options=arguments.edc_options)
+
+        batsim.register_EDC(edc)
+        batsim.begin_simulation()
+
+        while not batsim.is_simulation_finished():
+            batsim.receive_message()
+            edc.handle_message(batsim.message)
+            batsim.send_answer_message()
+
+        edc.terminate()
+    # exit with Batsim
+    '''

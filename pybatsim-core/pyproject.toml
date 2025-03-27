@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "pybatsim"
-version = "4.0.0-alpha.0"
+version = "4.0.0-beta.0"
 description = "Python API and schedulers for Batsim"
 readme = "README.rst"
 keywords = [
@@ -39,11 +39,10 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.7.1"
+python = "^3.10.0"
 procset = "^1.0"
 sortedcontainers = "^2.4.0"
-pyzmq = ">=22.0.0"
-importlib-metadata = {version = ">=3.6", python = "<3.10"}
+pyzmq = ">=26.0.0"
 
 [tool.poetry.dev-dependencies]
 coverage = "^6.2"
@@ -54,10 +53,4 @@ pybatsim = "pybatsim.cmdline:main"
 
 # definition of officialy maintained schedulers
 [tool.poetry.plugins."pybatsim.schedulers"]
-backfill-easy = "pybatsim.schedulers.easyBackfill:EasyBackfill"
-fcfs = "pybatsim.schedulers.fcfs:Fcfs"
-fcfs-dvfs = "pybatsim.schedulers.fcfsWithDVFS:FcfsWithDVFS"
-fcfs-sleeper = "pybatsim.schedulers.fcfsSchedSleep:FcfsSchedSleep"
-filler = "pybatsim.schedulers.fillerSched:FillerSched"
-filler-events = "pybatsim.schedulers.fillerSchedWithEvents:FillerSchedWithEvents"
 random = "pybatsim.schedulers.randomSched:RandomSched"
