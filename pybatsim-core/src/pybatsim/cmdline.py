@@ -221,13 +221,14 @@ def main(args=None):
 
         edc = edc_cls(batsim, options=arguments.EDC_options)
 
-        batsim.begin_simulation()
+        # TODO: for the moment SimulationBeginsEvent is sent along with other events. Handle it in the main loop
+        #batsim.begin_simulation()
 
         while not batsim.is_simulation_finished():
             batsim.receive_message()
-            edc.handle_message(batsim.message)
+            edc.handle_message(batsim._rx)
             batsim.send_answer_message()
 
-        #edc.terminate()
+        edc.finish()
     # exit with Batsim
 
