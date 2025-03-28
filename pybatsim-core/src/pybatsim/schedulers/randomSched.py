@@ -6,7 +6,16 @@ from pybatsim.batsim.batsim import BatsimScheduler
 
 
 class RandomSched(BatsimScheduler):
+    def __init__(self, batsim, options):
+        self._batsim = batsim
+        self._options = options
 
+
+        self._batsim.add_EDCHello("RandomSched", "v0.1")
+        self._batsim.register_EDC(self)
+
+
+    '''
     def onSimulationBegins(self):
         self.res = [x for x in range(self.bs.nb_resources)]
         self.jobs_res = {}
@@ -44,3 +53,4 @@ class RandomSched(BatsimScheduler):
 
     def onNoMoreEvents(self):
         self.scheduleJobs()
+    '''

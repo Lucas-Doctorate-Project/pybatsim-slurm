@@ -134,10 +134,10 @@ def _build_parser():
         metavar='ADDRESS',
     )
     parser.add_argument(
-        '-o', '--scheduler-options',
+        '-o', '--EDC-options',
         default={},
         action=_JsonStoreAction,
-        help='options forwarded to the scheduler (default: empty dict), '
+        help='options forwarded to the External Decision Component (default: empty dict), '
              'either a JSON string (e.g., \'{"option": "value"}\') '
              'or a @-prefixed JSON file containing the options (e.g., \'@options.json\')',
         metavar='[@]OPTIONS',
@@ -201,7 +201,7 @@ def main(args=None):
         if arguments.edc_name not in sched_list:
             raise ValueError(f'Invalid EDC_name: {arguments.edc_name} (choose from {sched_list})')
 
-        _abort_on_ambiguous_scheduler_name(arguments.scheduler, parser=parser)
+        _abort_on_ambiguous_scheduler_name(arguments.edc_name, parser=parser)
     else:
         pass
         if not arguments.filename.is_file():
@@ -212,16 +212,15 @@ def main(args=None):
         if not hasattr(EDC_module, arguments.edc_name):
             raise ValueError(f'Invalid EDC_name: {arguments.edc_name} not found in specified file {arguments.filename}')
 
-    '''
+
     with Batsim(arguments.socket_endpoint, arguments.timeout) as batsim:
         if arguments.filename is None:
             edc_cls = _find_scheduler_class(arguments.edc_name)
         else:
             edc_cls = getattr(EDC_module, arguments.edc_name)
 
-        edc = edc_cls(batsim.simulation_context, options=arguments.edc_options)
+        edc = edc_cls(batsim, options=arguments.EDC_options)
 
-        batsim.register_EDC(edc)
         batsim.begin_simulation()
 
         while not batsim.is_simulation_finished():
@@ -229,6 +228,6 @@ def main(args=None):
             edc.handle_message(batsim.message)
             batsim.send_answer_message()
 
-        edc.terminate()
+        #edc.terminate()
     # exit with Batsim
-    '''
+
