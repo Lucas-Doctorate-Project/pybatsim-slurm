@@ -119,11 +119,11 @@ def _build_parser():
     )
     parser.add_argument(
         '-t', '--timeout',
-        default=2_000,
+        default=5_000,
         type=int,
         help='the timeout (in milliseconds) to wait for a Batsim answer, '
              'supply a negative value to disable '
-             '(default: 2000)',
+             '(default: 5000)',
     )
     parser.add_argument(
         '-s', '--socket-endpoint',
@@ -228,7 +228,7 @@ def main(args=None):
 
         while not batsim.is_simulation_finished():
             batsim.recv_msg()
-            edc.handle_message(batsim._rx)
+            batsim.dispatch_msg()
             batsim.send_msg()
 
         edc.finish()

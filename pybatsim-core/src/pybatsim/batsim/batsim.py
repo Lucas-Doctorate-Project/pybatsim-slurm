@@ -8,7 +8,6 @@ import logging
 from enum import Enum
 from procset import ProcSet
 
-from struct import unpack # TODO remove this
 
 ''' List of batprotocol event types '''
 class EventType(Enum):
@@ -59,23 +58,23 @@ class Event:
             "event": self.data
         }
 
-    @staticmethod
-    def from_json_dict(json_dict):
-        return Event(json_dict["timestamp"],
-                     EventType[json_dict["event_type"]],
-                     json_dict["event"])
+    @classmethod
+    def from_json_dict(cls, json_dict):
+        return cls(json_dict["timestamp"],
+                   EventType[json_dict["event_type"]],
+                   json_dict["event"])
 
 
 # TODO: move this outside of batsim.py
 class ExternalDecisionComponent:
     def __init__(self, batsim, options = None):
-        self._basim = batsim
+        self._batsim = batsim
         self._options = options
 
         self._batsim.add_EDCHello("UnknownEDC", "v0.0", "")
         self._batsim.register_EDC(self)
 
-    def handle_message(self, message):
+    def handle_msg(self, msg):
         raise NotImplementedError()
 
     def handle_SimulationBegins(self, event):
@@ -99,9 +98,9 @@ class Job:
         self.extra_data = extra_data
 
 
-    @staticmethod
-    def from_json_dict(json_dict):
-        return Job(json_dict["job_id"],
+    @classmethod
+    def from_json_dict(cls, json_dict):
+        return cls(json_dict["job_id"],
                    json_dict["submission_time"],
                    json_dict["job"]["resource_request"],
                    json_dict["job"]["walltime"],
@@ -194,6 +193,8 @@ class SimulationMetadata:
         }
 
 
+# TODO: Implement public API to access SimulationMetadata
+
 class Batsim:
     # SERIALIZATION_FORMAT_BINARY = 1  # unsupported
     SERIALIZATION_FORMAT_JSON = 2
@@ -201,7 +202,7 @@ class Batsim:
     WORKLOAD_JOB_SEPARATOR = "!"
     #ATTEMPT_JOB_SEPARATOR = "#" # Used when resubmitting job
 
-    def __init__(self, *, endpoint: str, timeout: int | None):
+    def __init__(self, *, endpoint: str, timeout: int | None = None):
         self._endpoint: str = endpoint
         self._timeout: int = -1 if timeout is None else timeout
         self._zmq_socket: zmq.Socket | None = None
@@ -225,8 +226,8 @@ class Batsim:
 
     def __teardown_zmq(self):
         self._zmq_socket.unbind(self._endpoint)
-        #self._zmq_socket.close()
-        self._zmq_socket.context.destroy() # Closes open socket
+        self._zmq_socket.close()
+        self._zmq_socket.context.destroy()
 
     def __enter__(self):
         self.__setup_zmq()  # connect to Batsim ØMQ socket
@@ -324,12 +325,12 @@ class Batsim:
         # Whether the even SimulationEnds has been received yet
         return self._received_SimulationEnds
 
-    def recv_msg(self):
+    def recv_msg(self) -> None:
         try:
+            raw_msg = self._zmq_socket.recv_string()
             # The batprotocol currently adds a \0 at the end of each message formatted in JSON
             # Issue openned in batprotocol: https://framagit.org/batsim/batprotocol/-/issues/3
             #json_msg = self._zmq_socket.recv_json()
-            raw_msg = self._zmq_socket.recv_string()
             json_msg = json.loads(raw_msg[:-1])
             print(f"Received Batsim message:\n{json_msg}")
 
@@ -338,8 +339,12 @@ class Batsim:
         except zmq.error.Again: # Timeout
             raise ValueError("[PYBATSIM]: Socket timeout reached, Batsim is not responding (maybe deadlocked)")
 
+    def dispatch_msg(self) -> None:
+        # Triggers message handling by registered EDC
+        self._edc.handle_msg(self._rx)
 
     def send_msg(self):
+        # Sends answer message to batsim
         json_msg = self.serialise_message(self._tx)
         print(f"Sending to Batsim:\n{json_msg}")
         self._zmq_socket.send_json(json_msg)

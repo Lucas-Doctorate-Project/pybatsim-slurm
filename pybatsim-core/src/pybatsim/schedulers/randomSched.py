@@ -9,21 +9,22 @@ class RandomSched(ExternalDecisionComponent):
     def __init__(self, batsim, options):
         self._batsim = batsim
         self._options = options
+        self.scheduling_needed = False
 
-        self._batsim._simulation_context.forward_profiles_on_job_submission = True
+        self._batsim._simulation_metadata.forward_profiles_on_job_submission = True
 
-        self._batsim.add_event(self._batsim.create_EDCHelloEvent("RandomSched", "v0.1"))
-        self._batsim.register_EDC(self)
+        self._batsim.add_event(self._batsim.create_EDCHelloEvent("RandomSched", "v0.1", ""))
+
 
     def handle_SimulationBegins(self, event):
         #TODO: update this if info from SimulationBegins are sent in BatsimHello event
         self.nb_compute_res = event.data["computation_host_number"]
-        self.available_res = ProcSet(0, self.nb_compute_res)
+        self.available_res = ProcSet((0, self.nb_compute_res-1))
         self.waiting_jobs = set()
         self.running_jobs = {}
 
 
-    def handle_message(self, message):
+    def handle_msg(self, message):
         for event in message:
             match event.type:
                 case EventType.SimulationBeginsEvent:
