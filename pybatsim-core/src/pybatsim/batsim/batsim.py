@@ -174,6 +174,25 @@ class SimulationMetadata:
     job_allocation_validation_strategy: Job.AllocValidationStrategy = \
             Job.AllocValidationStrategy.MatchJobRequestExactly
 
+    def to_batsim_dict(self):
+        return {
+            "batprotocol_version": self.batprotocol_version, #TODO
+            "requested_simulation_features": {
+                "dynamic_registration": self.dynamic_registration,
+                "profile_reuse": self.profile_reuse,
+                "acknowledge_dynamic_jobs": self.acknowledge_dynamic_jobs,
+                "forward_profiles_on_job_submission": self.forward_profiles_on_job_submission,
+                "forward_profiles_on_jobs_killed": self.forward_profiles_on_jobs_killed,
+                "forward_profiles_on_simulation_begins": self.forward_profiles_on_simulation_begins,
+                "forward_unknown_external_events": self.forward_unknown_external_events,
+            },
+            "scheduling_constraints": {
+                "compute_sharing": self.compute_sharing,
+                "storage_sharing": self.storage_sharing,
+                "job_allocation_validation_strategy": self.job_allocation_validation_strategy.name,
+            },
+        }
+
 
 class Batsim:
     # SERIALIZATION_FORMAT_BINARY = 1  # unsupported
@@ -196,23 +215,21 @@ class Batsim:
         self._tx: deque[Event] = deque()
 
     def __setup_zmq(self):
-        # context.__enter__()
         context = zmq.Context()
         context.setsockopt(zmq.RCVTIMEO, self._timeout)
 
-        # context.socket.__enter__()
         self._zmq_socket = context.socket(socket_type=zmq.REP)
 
-        # bind.__enter__()
         self._zmq_socket.bind(self._endpoint)
+        self._endpoint = self._zmq_socket.getsockopt(zmq.LAST_ENDPOINT) # Get the real endpoint without wilcards
 
     def __teardown_zmq(self):
-        self._zmq_socket.unbind()
-        self._zmq_socket.close()  # socket.__exit__()
-        self._zmq_socket.context.destroy()  # context.__exit__()
+        self._zmq_socket.unbind(self._endpoint)
+        #self._zmq_socket.close()
+        self._zmq_socket.context.destroy() # Closes open socket
 
     def __enter__(self):
-        self._zmq_socket = self.__setup_zmq()  # connect to Batsim ØMQ socket
+        self.__setup_zmq()  # connect to Batsim ØMQ socket
 
         try:
             # handle init message
@@ -276,18 +293,23 @@ class Batsim:
         metadata.batsim_version = event.data["batsim_version"]
         metadata.batsim_commit = event.data["batsim_commit"]
 
-    def register_EDC(self, EDC):
-        self._edc = EDC
+    def register_EDC(self, edc):
+        self._edc = edc
 
-        # Send the EDCHello message to batsim
-        if (len(self._tx) != 1) and (self._tx[0].type != EventType.EDCHelloEvent):
-            raise ValueError(f"[PYBATSIM]: The EDC must add an EDCHello event and no other events before calling register_EDC()")
+        edc_hello_event = self._tx[0]
 
-        self.send_answer_message()
+        if edc_hello_event.type != EventType.EDCHelloEvent:
+            raise ValueError(f"EDC asked to send '{edc_hello_event.type.name}', expected '{EventType.EDCHelloEvent.name}'")
+
+        if (len(self._tx) != 1):
+            raise ProtocolError(f"The EDC Hello message must contain a single '{EventType.EDCHelloEvent.name}'")
+
+        self.send_msg()
 
 
-    def begin_simulation(self):
-        # Wait for SimulationBegin message
+    '''def begin_simulation(self):
+    # TODO: Update when SimulationBegins event is sent alone in a message
+        # Wait for SimulationBegins message
         self.recv_msg()
         event = self.pop_event()
 
@@ -296,6 +318,7 @@ class Batsim:
 
         # Pass it to EDC's handler
         # send to Batsim the answer message (possibly containing first decisions from EDC)
+    '''
 
     def is_simulation_finished(self):
         # Whether the even SimulationEnds has been received yet
@@ -305,24 +328,22 @@ class Batsim:
         try:
             # The batprotocol currently adds a \0 at the end of each message formatted in JSON
             # Issue openned in batprotocol: https://framagit.org/batsim/batprotocol/-/issues/3
-            raw_msg = self._connection.recv_string()
+            #json_msg = self._zmq_socket.recv_json()
+            raw_msg = self._zmq_socket.recv_string()
             json_msg = json.loads(raw_msg[:-1])
-            #json_msg = self._connection.recv_json()
             print(f"Received Batsim message:\n{json_msg}")
 
             self._rx = self.deserialise_message(json_msg)
+        # TODO handle json.loads exception and deserialisation exceptions
         except zmq.error.Again: # Timeout
             raise ValueError("[PYBATSIM]: Socket timeout reached, Batsim is not responding (maybe deadlocked)")
 
 
-    def send_answer_message(self):
-        try:
-            json_msg = self.serialise_message(self._tx)
-            print(f"Sending to Batsim:\n{json_msg}")
-            self._connection.send_json(json_msg)
-            self._tx = deque()
-        except zmq.error.Again: # Timeout
-            raise ValueError("[PYBATSIM]: Socket timeout reached, Batsim is not responding (maybe deadlocked)")
+    def send_msg(self):
+        json_msg = self.serialise_message(self._tx)
+        print(f"Sending to Batsim:\n{json_msg}")
+        self._zmq_socket.send_json(json_msg)
+        self._tx = deque()
 
     def pop_event(self):
         return self._rx.popleft()
@@ -335,7 +356,7 @@ class Batsim:
     '''
     def deserialise_message(self, json_msg):
         self._time = json_msg["now"]
-        message = []
+        message = deque()
         for json_event in json_msg["events"]:
             print("--- Received event:", json_event)
             # TODO: properly deserialise the JSON event
@@ -354,27 +375,14 @@ class Batsim:
         return new_msg
 
 
-    def create_EDCHelloEvent(self, EDC_name, EDC_version, EDC_commit=None):
-        return Event(self._time, EventType.EDCHelloEvent,
-            {
-                "batprotocol_version": self._simulation_metadata.batprotocol_version, #TODO
-                "decision_component_name": EDC_name,
-                "decision_component_version": EDC_version,
-                "decision_component_commit": EDC_commit if EDC_commit is not None else "",
-                "requested_simulation_features": {
-                    "dynamic_registration": self._simulation_metadata.dynamic_registration,
-                    "profile_reuse": self._simulation_metadata.profile_reuse,
-                    "acknowledge_dynamic_jobs": self._simulation_metadata.acknowledge_dynamic_jobs,
-                    "forward_profiles_on_job_submission": self._simulation_metadata.forward_profiles_on_job_submission,
-                    "forward_profiles_on_jobs_killed": self._simulation_metadata.forward_profiles_on_jobs_killed,
-                    "forward_profiles_on_simulation_begins": self._simulation_metadata.forward_profiles_on_simulation_begins,
-                    "forward_unknown_external_events": self._simulation_metadata.forward_unknown_external_events},
-                "scheduling_constraints": {
-                    "compute_sharing": self._simulation_metadata.compute_sharing,
-                    "storage_sharing": self._simulation_metadata.storage_sharing,
-                    "job_allocation_validation_strategy": self._simulation_metadata.job_allocation_validation_strategy.name}
-            }
-        )
+    def create_EDCHelloEvent(self, EDC_name, EDC_version, EDC_commit):
+        data_dict = self._simulation_metadata.to_batsim_dict()
+        data_dict |= {
+            "decision_component_name": EDC_name,
+            "decision_component_version": EDC_version,
+            "decision_component_commit": EDC_commit,
+        }
+        return Event(self._time, EventType.EDCHelloEvent, data_dict)
 
     def create_RejectJobEvent(self, job_id):
         return Event(self._time, EventType.RejectJobEvent,
@@ -387,16 +395,20 @@ class Batsim:
         alloc_dict = exec_placement.to_json_dict()
         alloc_dict["host_allocation"] = str(job.allocation)
 
-        #TODO: need to correctly handle optional profile_allocation_override list (by providing QoL object/methods)
-        #TODO: need to correctly handle optional storage_placement list (by providing QoL object/methods)
+        event_dict = {
+            "job_id": job.job_id,
+            "allocation": alloc_dict,
+        }
 
-        return Event(self._time, EventType.ExecuteJobEvent,
-            {
-                "job_id": job.job_id,
-                "allocation": alloc_dict,
-                "profile_allocation_override": profile_alloc_override if profile_alloc_override is not None else [],
-                "storage_placement": storage_placement if storage_placement is not None else []
-            })
+        #TODO: need to correctly handle optional profile_allocation_override list (by providing QoL object/methods)
+        if profile_alloc_override is not None:
+            event_dict["profile_allocation_override"] = profile_alloc_override
+
+        #TODO: need to correctly handle optional storage_placement list (by providing QoL object/methods)
+        if storage_placement is not None:
+            event_dict["storage_placement"] = storage_placement
+
+        return Event(self._time, EventType.ExecuteJobEvent, event_dict)
 
 
 # End of class Batsim

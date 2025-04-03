@@ -213,7 +213,7 @@ def main(args=None):
             raise ValueError(f'Invalid EDC_name: {arguments.edc_name} not found in specified file {arguments.filename}')
 
 
-    with Batsim(arguments.socket_endpoint, arguments.timeout) as batsim:
+    with Batsim(endpoint=arguments.socket_endpoint, timeout=arguments.timeout) as batsim:
         if arguments.filename is None:
             edc_cls = _find_scheduler_class(arguments.edc_name)
         else:
@@ -221,13 +221,15 @@ def main(args=None):
 
         edc = edc_cls(batsim, options=arguments.EDC_options)
 
+        batsim.register_EDC(edc)
+
         # TODO: for the moment SimulationBeginsEvent is sent along with other events. Handle it in the main loop
         #batsim.begin_simulation()
 
         while not batsim.is_simulation_finished():
-            batsim.receive_message()
+            batsim.recv_msg()
             edc.handle_message(batsim._rx)
-            batsim.send_answer_message()
+            batsim.send_msg()
 
         edc.finish()
     # exit with Batsim
