@@ -14,9 +14,6 @@ import logging
 import sys
 import textwrap
 import time
-import importlib.util
-
-from pathlib import Path
 
 from pybatsim import __version__
 from pybatsim.batsim.batsim import Batsim
@@ -145,18 +142,11 @@ def _build_parser():
 
     parser.add_argument(
         'edc_name',
-        #choices=sorted(set(name for name, _ in find_plugin_schedulers())),
+        choices=sorted(set(name for name, _ in find_plugin_schedulers())),
         metavar='EDC_name',
         help='name of the External Decision Component (EDC) to run.\n'
-             f'If no second argument is provided, this should match a name registered under \'{SCHEDULER_ENTRY_POINT}\' entry point. '
-             f'If a filename is provided as second argument, this should match the class name of the EDC.'
+             f'This should match a name registered under \'{SCHEDULER_ENTRY_POINT}\' entry point of the pyproject.toml file.'
     )
-    parser.add_argument(
-        'filename',
-        default=None,
-        type=Path,
-        nargs='?',
-        help='(optional) path to the file containing the EDC.')
     return parser
 
 
@@ -178,14 +168,6 @@ def _find_scheduler_class(name):
             return cls
     raise ValueError(f'Unknown scheduler name: {name}')
 
-def _import_EDC_from_path(EDC_name, file_path):
-    # Found here: https://docs.python.org/3/library/importlib.html#importing-a-source-file-directly
-    spec = importlib.util.spec_from_file_location(EDC_name, file_path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[EDC_name] = module
-    spec.loader.exec_module(module)
-    return module
-
 
 def main(args=None):
     logging.basicConfig(level=logging.INFO)
@@ -195,30 +177,13 @@ def main(args=None):
     arguments = parser.parse_args(args)
     logging.debug(f'parsed arguments: {vars(arguments)}')
 
-    if arguments.filename is None:
-        # EDC must exist in the Entrypoint
-        sched_list = sorted(set(name for name, _ in find_plugin_schedulers()))
-        if arguments.edc_name not in sched_list:
-            raise ValueError(f'Invalid EDC_name: {arguments.edc_name} (choose from {sched_list})')
+    _abort_on_ambiguous_scheduler_name(arguments.edc_name, parser=parser)
 
-        _abort_on_ambiguous_scheduler_name(arguments.edc_name, parser=parser)
-    else:
-        pass
-        if not arguments.filename.is_file():
-            raise ValueError(f'Invalid file name: {arguments.filename} does not exist')
-
-        # else need to check that EDC exists in module provided by the filename
-        EDC_module = _import_EDC_from_path("EDC_module", arguments.filename)
-        if not hasattr(EDC_module, arguments.edc_name):
-            raise ValueError(f'Invalid EDC_name: {arguments.edc_name} not found in specified file {arguments.filename}')
-
-
+    # TODO: handle exceptions from ZMQ
+    # A ZMQ timeout usually means batsim has deadlocked/crashed
     with Batsim(endpoint=arguments.socket_endpoint, timeout=arguments.timeout) as batsim:
-        if arguments.filename is None:
-            edc_cls = _find_scheduler_class(arguments.edc_name)
-        else:
-            edc_cls = getattr(EDC_module, arguments.edc_name)
-
+        # Instantiate the EDC
+        edc_cls = _find_scheduler_class(arguments.edc_name)
         edc = edc_cls(batsim, options=arguments.EDC_options)
 
         batsim.register_EDC(edc)
