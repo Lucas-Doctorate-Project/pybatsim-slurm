@@ -3,7 +3,7 @@ from random import sample
 from procset import ProcSet
 
 from pybatsim.batsim.batsim import ExternalDecisionComponent, EventType, Job
-
+from pybatsim.batsim.events import *
 
 class RandomSched(ExternalDecisionComponent):
     def __init__(self, batsim, options):
@@ -11,9 +11,11 @@ class RandomSched(ExternalDecisionComponent):
         self._options = options
         self.scheduling_needed = False
 
-        self._batsim._simulation_metadata.forward_profiles_on_job_submission = True
+        self._batsim.simulation_metadata.forward_profiles_on_job_submission = True
 
-        self._batsim.add_event(self._batsim.create_EDCHelloEvent("RandomSched", "v0.1", ""))
+        self._batsim.add_event(EDCHelloEvent(self._batsim.time,
+                                             self._batsim.simulation_metadata,
+                                             "RandomSched", "v0.1", ""))
 
 
     def handle_SimulationBegins(self, event):
@@ -46,16 +48,16 @@ class RandomSched(ExternalDecisionComponent):
 
 
     def handle_JobSubmitted(self, event):
-        j = Job.from_json_dict(event.data)
+        j = event.job
         if j.resource_request > self.nb_compute_res:
-            self._batsim.add_event(self._batsim.create_RejectJobEvent(j.job_id))
+            self._batsim.add_event(RejectJobEvent(self._batsim.time, j.job_id))
 
         self.waiting_jobs.add(j)
         self.scheduling_needed = True
 
 
     def handle_JobCompleted(self, event):
-        j = self.running_jobs.pop(event.data["job_id"])
+        j = self.running_jobs.pop(event.job_id)
         self.available_res |= j.allocation
         self.scheduling_needed = True
 
@@ -75,6 +77,6 @@ class RandomSched(ExternalDecisionComponent):
         for j in scheduledJobs:
             self.waiting_jobs.remove(j)
             self.running_jobs[j.job_id] = j
-            self._batsim.add_event(self._batsim.create_ExecuteJobEvent(j))
+            self._batsim.add_event(ExecuteJobEvent(self._batsim.time, j))
 
         self.scheduling_needed = False

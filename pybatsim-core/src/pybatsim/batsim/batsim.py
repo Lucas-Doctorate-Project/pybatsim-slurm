@@ -1,69 +1,14 @@
-import json
-from collections import deque
-from dataclasses import dataclass
 import sys
 import zmq
+import json
 import logging
 
-from enum import Enum
+from collections import deque
+from dataclasses import dataclass
 from procset import ProcSet
 
-
-''' List of batprotocol event types '''
-class EventType(Enum):
-    JobSubmittedEvent = 1
-    JobCompletedEvent = 2
-    RejectJobEvent = 3
-    ExecuteJobEvent = 4
-    KillJobsEvent = 5
-    JobsKilledEvent = 6
-
-    RegisterProfileEvent = 7
-    RegisterJobEvent = 8
-
-    CreateProbeEvent = 9
-    StopProbeEvent = 10
-    TriggerProbeEvent = 11
-    ResetProbeEvent = 12
-    ProbeDataEmittedEvent = 13
-    CallMeLaterEvent = 14
-    RequestedCallEvent = 15
-    StopCallMeLaterEvent = 16
-
-    BatsimHelloEvent = 17
-    EDCHelloEvent = 18
-    SimulationBeginsEvent = 19
-    SimulationEndsEvent = 20
-
-    AllStaticJobsHaveBeenSubmittedEvent = 21
-    AllStaticExternalEventsHaveBeenInjectedEvent = 22
-    FinishRegistrationEvent = 23
-    ForceSimulationStopEvent = 24
-
-    ChangeHostPStateEvent = 25
-    HostPStateChangedEvent = 26
-    ExternalEventOccurredEvent = 27
-# End of enum class EventType
-
-class Event:
-    def __init__(self, timestamp, event_type, event_dict):
-        self.timestamp = timestamp
-        self.type = event_type
-        self.data = event_dict
-
-    def to_json_dict(self):
-        return {
-            "timestamp": self.timestamp,
-            "event_type": self.type.name,
-            "event": self.data
-        }
-
-    @classmethod
-    def from_json_dict(cls, json_dict):
-        return cls(json_dict["timestamp"],
-                   EventType[json_dict["event_type"]],
-                   json_dict["event"])
-
+from .events import *
+from .job import Job
 
 # TODO: move this outside of batsim.py
 class ExternalDecisionComponent:
@@ -84,66 +29,6 @@ class ExternalDecisionComponent:
         pass
 
 
-
-class Job:
-    def __init__(self, job_id, submission_time, resource_request,
-                 walltime, profile_id,
-                 profile_dict = None, extra_data = None):
-        self.job_id = job_id
-        self.submission_time = submission_time
-        self.resource_request = resource_request
-        self.walltime = walltime
-        self.profile_id = profile_id
-        self.profile_dict = profile_dict
-        self.extra_data = extra_data
-
-
-    @classmethod
-    def from_json_dict(cls, json_dict):
-        return cls(json_dict["job_id"],
-                   json_dict["submission_time"],
-                   json_dict["job"]["resource_request"],
-                   json_dict["job"]["walltime"],
-                   json_dict["job"]["profile_id"],
-                   json_dict.get("profile"),
-                   json_dict["job"].get("extra_data"))
-
-    #TODO: will disappear soon?
-    class AllocValidationStrategy(Enum):
-        MatchJobRequestExactly = 0
-        MatchJobRequestBigEnough = 1
-
-    class ExecutorPlacement:
-
-        class ExecutorPlacementType(Enum):
-            PredefinedExecutorPlacementStrategyWrapper = 0
-            CustomExecutorToHostMapping = 1
-
-        class ExecutorPlacementStrategy(Enum):
-            SpreadOverHostsFirst = 0
-            FillOneHostCoresFirst = 1
-
-        def __init__(self, placement_type = ExecutorPlacementType.PredefinedExecutorPlacementStrategyWrapper,
-                           placement_arg = ExecutorPlacementStrategy.SpreadOverHostsFirst):
-            self.placement_type = placement_type
-
-            self.placement_strategy = placement_arg if self.placement_type is self.ExecutorPlacementType.PredefinedExecutorPlacementStrategyWrapper else None
-            self.custom_mapping = placement_arg if self.placement_type is self.ExecutorPlacementType.CustomExecutorToHostMapping else None
-
-        def to_json_dict(self):
-            json_dict = {
-                "executor_placement_type": self.placement_type.name
-            }
-
-            if self.placement_type == self.ExecutorPlacementType.PredefinedExecutorPlacementStrategyWrapper:
-                json_dict["executor_placement"] = {
-                    "strategy": self.placement_strategy.name
-                }
-            elif self.placement_type == self.ExecutorPlacementType.CustomExecutorToHostMapping:
-                json_dict["executor_placement"] = {
-                    "mapping": self.custom_mapping
-                }
-            return json_dict
 
 
 # Stores all simulation parameters and information exchanged in the hello events
@@ -173,7 +58,7 @@ class SimulationMetadata:
     job_allocation_validation_strategy: Job.AllocValidationStrategy = \
             Job.AllocValidationStrategy.MatchJobRequestExactly
 
-    def to_batsim_dict(self):
+    def to_protocol_dict(self):
         return {
             "batprotocol_version": self.batprotocol_version, #TODO
             "requested_simulation_features": {
@@ -257,6 +142,11 @@ class Batsim:
     @property
     def time(self):
         return self._time
+
+    @property
+    def simulation_metadata(self):
+        return self._simulation_metadata
+
 
     def _recv_init_msg(self) -> None:
         # Batsim sends the first message (init message)
@@ -378,42 +268,5 @@ class Batsim:
             "events": [e.to_json_dict() for e in self._tx]
         }
         return new_msg
-
-
-    def create_EDCHelloEvent(self, EDC_name, EDC_version, EDC_commit):
-        data_dict = self._simulation_metadata.to_batsim_dict()
-        data_dict |= {
-            "decision_component_name": EDC_name,
-            "decision_component_version": EDC_version,
-            "decision_component_commit": EDC_commit,
-        }
-        return Event(self._time, EventType.EDCHelloEvent, data_dict)
-
-    def create_RejectJobEvent(self, job_id):
-        return Event(self._time, EventType.RejectJobEvent,
-            {
-                "data": { "job_id": job_id}
-            })
-
-    def create_ExecuteJobEvent(self, job, executor_placement = None, profile_alloc_override = None, storage_placement = None):
-        exec_placement = executor_placement if executor_placement is not None else Job.ExecutorPlacement()
-        alloc_dict = exec_placement.to_json_dict()
-        alloc_dict["host_allocation"] = str(job.allocation)
-
-        event_dict = {
-            "job_id": job.job_id,
-            "allocation": alloc_dict,
-        }
-
-        #TODO: need to correctly handle optional profile_allocation_override list (by providing QoL object/methods)
-        if profile_alloc_override is not None:
-            event_dict["profile_allocation_override"] = profile_alloc_override
-
-        #TODO: need to correctly handle optional storage_placement list (by providing QoL object/methods)
-        if storage_placement is not None:
-            event_dict["storage_placement"] = storage_placement
-
-        return Event(self._time, EventType.ExecuteJobEvent, event_dict)
-
 
 # End of class Batsim
