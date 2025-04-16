@@ -188,9 +188,6 @@ def main(args=None):
 
         batsim.register_EDC(edc)
 
-        # TODO: for the moment SimulationBeginsEvent is sent along with other events. Handle it in the main loop
-        #batsim.begin_simulation()
-
         while not batsim.is_simulation_finished():
             batsim.recv_msg()
             batsim.dispatch_msg()

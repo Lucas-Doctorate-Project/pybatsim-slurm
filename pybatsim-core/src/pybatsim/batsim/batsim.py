@@ -37,7 +37,7 @@ class SimulationMetadata:
     edc_init_str: str | None = None
 
     # Batsim and batprotocol information
-    batprotocol_version: str | None = None
+    batprotocol_version: str = "undefined"
     batsim_version: str | None = None
     batsim_commit: str | None = None
 
@@ -120,10 +120,6 @@ class Batsim:
         try:
             # handle init message
             self._recv_init_msg()
-            self._zmq_socket.send_string("") # Batsim expects an empty answer
-
-            # handle Batsim Hello event/message
-            self._recv_batsim_hello_msg()
 
             return self
 
@@ -150,39 +146,21 @@ class Batsim:
 
     def _recv_init_msg(self) -> None:
         # Batsim sends the first message (init message)
-        # Batsim waits for an empty message as an answer.
-        #
         # message format:
-        # 1. flags(uint32)
-        # 2. data_size(uint32)
-        # 3. data(data_size bytes): EDC initialization string (forwarded from Batsim CLI)
-
+        # 1. init_data_size(uint32)
+        # 2. init_data(init_data_size bytes): EDC initialization string (forwarded from Batsim CLI)
         assert self._zmq_socket is not None, "Uninitialized _zmq_socket"
 
         raw_msg: bytes = self._zmq_socket.recv()
         assert raw_msg is not None, "Invalid init message"
 
-        flags = int.from_bytes(raw_msg[0:4], byteorder=sys.byteorder)
-        if flags != self.SERIALIZATION_FORMAT_JSON:
-            raise NotImplementedError(f"Unsupported batprotocol serialization format, expected '{self.SERIALIZATION_FORMAT_JSON}' but got '{flags}'")
-
-        data_size = int.from_bytes(raw_msg[4:8], byteorder=sys.byteorder)
-        data: bytes = raw_msg[8:]
-        if len(raw_msg) != 4 + 4 + data_size:
-            raise ValueError(f"Invalid data_size: received init message is {len(raw_msg)} bytes long, read data is {data_size} bytes long (should be 8 bytes less).")
+        data_size = int.from_bytes(raw_msg[:4], byteorder=sys.byteorder)
+        data: bytes = raw_msg[4:]
+        if len(raw_msg) != 4 + data_size:
+            raise ValueError(f"Invalid data_size: received init message is {len(raw_msg)} bytes long, read data is {data_size} bytes long (should be 4 bytes less).")
 
         self._simulation_metadata.edc_init_str = data[:data_size].decode('utf-8')
 
-    def _recv_batsim_hello_msg(self) -> None:
-        # wait for Batsim hello message, and set simulation metadata accordingly
-        self.recv_msg()
-        event = self.pop_event()
-        assert event.type == EventType.BatsimHelloEvent, f"Received '{event.type.name}', expected '{EventType.BatsimHelloEvent.name}'"
-
-        metadata = self._simulation_metadata
-        metadata.batprotocol_version = event.data["batprotocol_version"]
-        metadata.batsim_version = event.data["batsim_version"]
-        metadata.batsim_commit = event.data["batsim_commit"]
 
     def register_EDC(self, edc):
         self._edc = edc
@@ -195,21 +173,15 @@ class Batsim:
         if (len(self._tx) != 1):
             raise ProtocolError(f"The EDC Hello message must contain a single '{EventType.EDCHelloEvent.name}'")
 
-        self.send_msg()
+        # Send message prefixed by the serialisation_flag
+        flag_part = self.SERIALIZATION_FORMAT_JSON.to_bytes(4, byteorder=sys.byteorder)
+        json_part = json.dumps(self.serialise_message(self._tx))
+        msg = flag_part + json_part.encode()
 
+        print(f"Sending to Batsim:\n{json_part}")
+        self._zmq_socket.send(msg)
+        self._tx = deque()
 
-    '''def begin_simulation(self):
-    # TODO: Update when SimulationBegins event is sent alone in a message
-        # Wait for SimulationBegins message
-        self.recv_msg()
-        event = self.pop_event()
-
-        if event.type != EventType.SimulationBeginsEvent:
-            raise ValueError(f"[PYBATSIM]: Expecting SimulationBeginsEvent from Batsim, received {event.type.name}")
-
-        # Pass it to EDC's handler
-        # send to Batsim the answer message (possibly containing first decisions from EDC)
-    '''
 
     def is_simulation_finished(self):
         # Whether the even SimulationEnds has been received yet
@@ -253,7 +225,7 @@ class Batsim:
         self._time = json_msg["now"]
         message = deque()
         for json_event in json_msg["events"]:
-            print("--- Received event:", json_event)
+            print("--- Received event of type", json_event["event_type"])
             # TODO: properly deserialise the JSON event
             event = Event.from_json_dict(json_event)
             message.append(event)
