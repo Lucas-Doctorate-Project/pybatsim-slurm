@@ -151,11 +151,12 @@ class Batsim:
             # handle init message
             self._recv_init_msg()
 
-            return self
-
         except Exception:  # XXX: consider reducing caught exceptions
             self.__teardown_zmq()
             raise
+
+        else:
+            return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.__teardown_zmq()  # always clean the Batsim ØMQ resources (context/socket)
