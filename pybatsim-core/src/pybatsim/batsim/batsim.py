@@ -218,6 +218,8 @@ class Batsim:
         return self._received_SimulationEnds
 
     def recv_msg(self) -> None:
+        assert self._zmq_socket is not None, "Expected _zmq_socket to be initialized"
+
         try:
             raw_msg = self._zmq_socket.recv_string()
             # The batprotocol currently adds a \0 at the end of each message formatted in JSON
@@ -233,6 +235,7 @@ class Batsim:
 
     def dispatch_msg(self) -> None:
         # Triggers message handling by registered EDC
+        assert self._edc is not None, "Expected _edc to be initialized"
         self._edc.handle_msg(self._rx)
 
     def send_msg(self):
