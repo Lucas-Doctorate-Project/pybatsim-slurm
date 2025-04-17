@@ -2,7 +2,7 @@ from random import sample
 
 from procset import ProcSet
 
-from pybatsim.batsim.batsim import ExternalDecisionComponent, EventType, Job
+from pybatsim.batsim.batsim import ExternalDecisionComponent, EventType, Job, SimulationFeatures
 from pybatsim.batsim.events import *
 
 class RandomSched(ExternalDecisionComponent):
@@ -11,7 +11,8 @@ class RandomSched(ExternalDecisionComponent):
         self._options = options
         self.scheduling_needed = False
 
-        self._batsim.simulation_metadata.forward_profiles_on_job_submission = True
+        self._batsim.simulation_metadata.requested_features |= \
+                SimulationFeatures.FORWARD_PROFILES_ON_JOB_SUBMISSION
 
         self._batsim.add_event(EDCHelloEvent(self._batsim.time,
                                              self._batsim.simulation_metadata,

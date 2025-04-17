@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 import zmq
 import json
@@ -5,6 +7,7 @@ import logging
 
 from collections import deque
 from dataclasses import dataclass
+from enum import auto, Flag, FlagBoundary
 from procset import ProcSet
 
 from .events import *
@@ -29,6 +32,48 @@ class ExternalDecisionComponent:
         pass
 
 
+class SimulationFeatures(Flag, boundary=FlagBoundary.STRICT):
+    """
+    Configuration of simulation features.
+
+    See batprotocol::fb::EDCRequestedSimulationFeatures for reference.
+    """
+
+    DYNAMIC_REGISTRATION = auto()
+    """Enable dynamic registration of jobs and profiles."""
+
+    PROFILE_REUSE = auto()
+    """Allow existing profiles to be used to register new dynamic jobs."""
+
+    ACKNOWLEDGE_DYNAMIC_JOBS = auto()
+    """Ask Batsim to emit back a JobSubmittedEvent upon creation of a dynamic job."""
+
+    FORWARD_PROFILES_ON_JOB_SUBMISSION = auto()
+    """Include profile information in JobSubmittedEvent."""
+
+    FORWARD_PROFILES_ON_JOBS_KILLED = auto()
+    """Include profile information in JobsKilledEvent."""
+
+    FORWARD_PROFILES_ON_SIMULATION_BEGINS = auto()
+    """Include profile information in SimulationBeginsEvent."""
+
+    FORWARD_UNKNOWN_EXTERNAL_EVENTS = auto()
+    """Ask Batsim to forward unkown events."""
+
+    @classmethod
+    def default(cls) -> SimulationFeatures:
+        return cls(0)
+
+    def to_protocol_dict(self) -> dict:
+        return {
+            'dynamic_registration': SimulationFeatures.DYNAMIC_REGISTRATION in self,
+            'profile_reuse': SimulationFeatures.PROFILE_REUSE in self,
+            'acknowledge_dynamic_jobs': SimulationFeatures.ACKNOWLEDGE_DYNAMIC_JOBS in self,
+            'forward_profiles_on_job_submission': SimulationFeatures.FORWARD_PROFILES_ON_JOB_SUBMISSION in self,
+            'forward_profiles_on_jobs_killed': SimulationFeatures.FORWARD_PROFILES_ON_JOBS_KILLED in self,
+            'forward_profiles_on_simulation_begins': SimulationFeatures.FORWARD_PROFILES_ON_SIMULATION_BEGINS in self,
+            'forward_unknown_external_events': SimulationFeatures.FORWARD_UNKNOWN_EXTERNAL_EVENTS in self,
+        }
 
 
 # Stores all simulation parameters and information exchanged in the hello events
@@ -41,15 +86,8 @@ class SimulationMetadata:
     batsim_version: str | None = None
     batsim_commit: str | None = None
 
-    # TODO: consider using a enum.Flag and a single attribute
     # simulation features requested by the EDC
-    dynamic_registration: bool = False
-    profile_reuse: bool = False
-    acknowledge_dynamic_jobs: bool = False
-    forward_profiles_on_job_submission: bool = False
-    forward_profiles_on_jobs_killed: bool = False
-    forward_profiles_on_simulation_begins: bool = False
-    forward_unknown_external_events: bool = False
+    requested_features: SimulationFeatures = SimulationFeatures.default()
 
     # TODO: will disappear soon?
     # scheduling constraints
@@ -61,15 +99,7 @@ class SimulationMetadata:
     def to_protocol_dict(self):
         return {
             "batprotocol_version": self.batprotocol_version, #TODO
-            "requested_simulation_features": {
-                "dynamic_registration": self.dynamic_registration,
-                "profile_reuse": self.profile_reuse,
-                "acknowledge_dynamic_jobs": self.acknowledge_dynamic_jobs,
-                "forward_profiles_on_job_submission": self.forward_profiles_on_job_submission,
-                "forward_profiles_on_jobs_killed": self.forward_profiles_on_jobs_killed,
-                "forward_profiles_on_simulation_begins": self.forward_profiles_on_simulation_begins,
-                "forward_unknown_external_events": self.forward_unknown_external_events,
-            },
+            "requested_simulation_features": self.requested_features.to_protocol_dict(),
             "scheduling_constraints": {
                 "compute_sharing": self.compute_sharing,
                 "storage_sharing": self.storage_sharing,
