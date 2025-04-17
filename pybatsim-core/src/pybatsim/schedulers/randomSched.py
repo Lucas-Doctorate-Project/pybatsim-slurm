@@ -2,7 +2,8 @@ from random import sample
 
 from procset import ProcSet
 
-from pybatsim.batsim.batsim import ExternalDecisionComponent, EventType, Job, SimulationFeatures
+from pybatsim.batsim.batsim import ExternalDecisionComponent, EventType, Job
+from pybatsim.batsim.core import SimulationFeatures
 from pybatsim.batsim.events import *
 
 class RandomSched(ExternalDecisionComponent):
