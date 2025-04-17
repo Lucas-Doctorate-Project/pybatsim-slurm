@@ -2,9 +2,19 @@ from random import sample
 
 from procset import ProcSet
 
-from pybatsim.batsim.batsim import ExternalDecisionComponent, EventType, Job
+from pybatsim.batsim.batsim import ExternalDecisionComponent
 from pybatsim.batsim.core import SimulationFeatures
-from pybatsim.batsim.events import *
+from pybatsim.batsim.events import (
+    AllStaticJobsHaveBeenSubmittedEvent,
+    EDCHelloEvent,
+    ExecuteJobEvent,
+    JobCompletedEvent,
+    JobSubmittedEvent,
+    RejectJobEvent,
+    SimulationBeginsEvent,
+    SimulationEndsEvent,
+)
+
 
 class RandomSched(ExternalDecisionComponent):
     def __init__(self, batsim, options):
@@ -22,7 +32,7 @@ class RandomSched(ExternalDecisionComponent):
 
     def handle_SimulationBegins(self, event):
         #TODO: update this if info from SimulationBegins are sent in BatsimHello event
-        self.nb_compute_res = event.data["computation_host_number"]
+        self.nb_compute_res = event.computation_host_number
         self.available_res = ProcSet((0, self.nb_compute_res-1))
         self.waiting_jobs = set()
         self.running_jobs = {}
@@ -30,19 +40,19 @@ class RandomSched(ExternalDecisionComponent):
 
     def handle_msg(self, message):
         for event in message:
-            match event.type:
-                case EventType.SimulationBeginsEvent:
+            match event:
+                case SimulationBeginsEvent():
                     self.handle_SimulationBegins(event)
-                case EventType.SimulationEndsEvent:
+                case SimulationEndsEvent():
                     pass
-                case EventType.JobSubmittedEvent:
+                case JobSubmittedEvent():
                     self.handle_JobSubmitted(event)
-                case EventType.JobCompletedEvent:
+                case JobCompletedEvent():
                     self.handle_JobCompleted(event)
-                case EventType.AllStaticJobsHaveBeenSubmittedEvent:
-                    print("All static jobs have been submitted")
+                case AllStaticJobsHaveBeenSubmittedEvent():
+                    pass
                 case _:
-                    raise NotImplementedError(f"Handling of event type '{event.type.name}' not implemented")
+                    raise NotImplementedError(f"Handling of event type '{type(event).__name__}' not implemented")
 
         if self.scheduling_needed:
             self.do_schedule()

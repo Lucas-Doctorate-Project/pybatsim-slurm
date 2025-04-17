@@ -9,7 +9,7 @@ from collections import deque
 from procset import ProcSet
 
 from .core import SimulationMetadata
-from .events import *
+from .events import Event, EDCHelloEvent, SimulationEndsEvent
 
 # TODO: move this outside of batsim.py
 class ExternalDecisionComponent:
@@ -120,11 +120,11 @@ class Batsim:
 
         edc_hello_event = self._tx[0]
 
-        if edc_hello_event.type != EventType.EDCHelloEvent:
-            raise ValueError(f"EDC asked to send '{edc_hello_event.type.name}', expected '{EventType.EDCHelloEvent.name}'")
+        if not isinstance(edc_hello_event, EDCHelloEvent):
+            raise ValueError(f"EDC asked to send '{type(edc_hello_event).__name__}', expected 'EDCHelloEvent'")
 
         if (len(self._tx) != 1):
-            raise ProtocolError(f"The EDC Hello message must contain a single '{EventType.EDCHelloEvent.name}'")
+            raise ProtocolError(f"The EDC Hello message must contain a single 'EDCHelloEvent'")
 
         # Send message prefixed by the serialisation_flag
         flag_part = self.SERIALIZATION_FORMAT_JSON.to_bytes(4, byteorder=sys.byteorder)
@@ -183,17 +183,18 @@ class Batsim:
         for json_event in json_msg["events"]:
             print("--- Received event of type", json_event["event_type"])
             # TODO: properly deserialise the JSON event
-            event = Event.from_json_dict(json_event)
+            event = Event.from_protocol_dict(json_event)
             message.append(event)
 
-            if event.type == EventType.SimulationEndsEvent:
-                self._received_SimulationEnds = True
+            # XXX: this should not be done here, but rather in the handle of the event
+            self._received_SimulationEnds = isinstance(event, SimulationEndsEvent)
+
         return message
 
     def serialise_message(self, event_list):
         new_msg = {
             "now": self._time,
-            "events": [e.to_json_dict() for e in self._tx]
+            "events": [e.to_protocol_dict() for e in self._tx]
         }
         return new_msg
 
