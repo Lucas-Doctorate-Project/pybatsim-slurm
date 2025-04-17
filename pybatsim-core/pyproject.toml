@@ -80,8 +80,26 @@ quote-style = "single"
 
 [tool.ruff.lint]
 extend-select = [
+  "YTT",
+  "BLE",
+  "FBT",
+  "B",
+  "A",
+  "COM",
+  "C4",
+  "EM",
+  "EXE",
+  "FIX",
+  "RET",
+  "SLF",
+  "SIM",
+  "ARG",
   "I",
+  "N",
+  "PERF",
+  "E",
+  "W",
   "PL",
   "UP",
-  "N",
+  "TRY",
 ]
