@@ -11,27 +11,8 @@ from procset import ProcSet
 from .core import SimulationMetadata
 from .events import Event, EDCHelloEvent, SimulationEndsEvent
 
-# TODO: move this outside of batsim.py
-class ExternalDecisionComponent:
-    def __init__(self, batsim, options = None):
-        self._batsim = batsim
-        self._options = options
-
-        self._batsim.add_EDCHello("UnknownEDC", "v0.0", "")
-        self._batsim.register_EDC(self)
-
-    def handle_msg(self, msg):
-        raise NotImplementedError()
-
-    def handle_SimulationBegins(self, event):
-        pass
-
-    def finish(self):
-        pass
-
 
 # TODO: Implement public API to access SimulationMetadata
-
 class Batsim:
     # SERIALIZATION_FORMAT_BINARY = 1  # unsupported
     SERIALIZATION_FORMAT_JSON = 2
@@ -171,6 +152,7 @@ class Batsim:
     def pop_event(self):
         return self._rx.popleft()
 
+    # XXX: rename to {enqueue,append}_event to give a better sense of what happens?
     def add_event(self, event):
         self._tx.append(event)
 
@@ -197,5 +179,3 @@ class Batsim:
             "events": [e.to_protocol_dict() for e in self._tx]
         }
         return new_msg
-
-# End of class Batsim

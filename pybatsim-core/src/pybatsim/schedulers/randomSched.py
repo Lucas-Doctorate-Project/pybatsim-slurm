@@ -2,8 +2,8 @@ from random import sample
 
 from procset import ProcSet
 
-from pybatsim.batsim.batsim import ExternalDecisionComponent
 from pybatsim.batsim.core import SimulationFeatures
+from pybatsim.batsim.edc import ExternalDecisionComponent
 from pybatsim.batsim.events import (
     AllStaticJobsHaveBeenSubmittedEvent,
     EDCHelloEvent,

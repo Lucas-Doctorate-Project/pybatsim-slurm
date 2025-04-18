@@ -16,6 +16,7 @@ import textwrap
 import time
 
 from pybatsim import __version__
+from pybatsim.batsim.edc import ExternalDecisionComponent
 from pybatsim.batsim.batsim import Batsim
 from pybatsim.plugin import (SCHEDULER_ENTRY_POINT, find_ambiguous_scheduler_names,
     find_plugin_schedulers)
@@ -179,12 +180,11 @@ def main(args=None):
 
     _abort_on_ambiguous_scheduler_name(arguments.edc_name, parser=parser)
 
-    # TODO: handle exceptions from ZMQ
-    # A ZMQ timeout usually means batsim has deadlocked/crashed
+    # TODO: handle exceptions from ØMQ
+    # A ØMQ timeout usually means batsim has deadlocked/crashed
     with Batsim(endpoint=arguments.socket_endpoint, timeout=arguments.timeout) as batsim:
-        # Instantiate the EDC
         edc_cls = _find_scheduler_class(arguments.edc_name)
-        edc = edc_cls(batsim, options=arguments.EDC_options)
+        edc: ExternalDecisionComponent = edc_cls(batsim, options=arguments.EDC_options)
 
         batsim.register_EDC(edc)
 
@@ -193,6 +193,4 @@ def main(args=None):
             batsim.dispatch_msg()
             batsim.send_msg()
 
-        edc.finish()
-    # exit with Batsim
-
+        edc.finalize()
