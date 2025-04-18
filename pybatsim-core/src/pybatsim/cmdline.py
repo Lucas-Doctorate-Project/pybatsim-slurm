@@ -13,10 +13,9 @@ import json
 import logging
 import textwrap
 
-from pybatsim import __version__
-from pybatsim.batsim.batsim import Batsim
-from pybatsim.batsim.edc import ExternalDecisionComponent
-from pybatsim.plugin import (
+from . import __version__
+from .batsim import Batsim, ExternalDecisionComponent
+from .plugin import (
     EDC_ENTRY_POINT,
     find_ambiguous_edc_names,
     find_plugin_edcs,

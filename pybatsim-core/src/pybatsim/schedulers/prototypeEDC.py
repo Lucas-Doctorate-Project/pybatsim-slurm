@@ -3,7 +3,7 @@ import importlib.util
 
 from pathlib import Path
 
-from pybatsim.batsim.edc import ExternalDecisionComponent
+from pybatsim.batsim import ExternalDecisionComponent
 
 
 def _import_EDC_from_path(EDC_name, EDC_file):

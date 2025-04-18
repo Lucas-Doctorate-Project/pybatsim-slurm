@@ -2,19 +2,19 @@ from random import Random
 
 from procset import ProcSet
 
-from pybatsim.batsim.batsim import Batsim
-from pybatsim.batsim.core import SimulationFeatures
-from pybatsim.batsim.edc import Scheduler
-from pybatsim.batsim.events import (
+from pybatsim.batsim import (
+    Batsim,
     EDCHelloEvent,
     ExecuteJobEvent,
+    Job,
     JobCompletedEvent,
     JobSubmittedEvent,
     RejectJobEvent,
+    Scheduler,
     SimulationBeginsEvent,
     SimulationEndsEvent,
+    SimulationFeatures,
 )
-from pybatsim.batsim.job import Job
 
 
 class RandomScheduler(Scheduler):

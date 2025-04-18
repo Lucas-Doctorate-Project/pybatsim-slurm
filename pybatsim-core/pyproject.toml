@@ -92,6 +92,7 @@ extend-select = [
   "RET",
   "SLF",
   "SIM",
+  "TID",
   "ARG",
   "I",
   "N",
