@@ -1,4 +1,4 @@
-from random import sample
+from random import Random
 
 from procset import ProcSet
 
@@ -21,6 +21,7 @@ class RandomSched(ExternalDecisionComponent):
         self._batsim = batsim
         self._options = options
         self.scheduling_needed = False
+        self._generator = Random(42)
 
         self._batsim.simulation_metadata.requested_features |= \
                 SimulationFeatures.FORWARD_PROFILES_ON_JOB_SUBMISSION
@@ -79,7 +80,10 @@ class RandomSched(ExternalDecisionComponent):
 
         for j in self.waiting_jobs:
             if j.resource_request <= len(self.available_res):
-                res = sample(list(self.available_res), j.resource_request)
+                res = self._generator.sample(
+                    list(self.available_res),
+                    j.resource_request
+                )
                 print(f"Selected {res} for job {j.job_id}")
                 j.allocation = ProcSet(*res)
 
