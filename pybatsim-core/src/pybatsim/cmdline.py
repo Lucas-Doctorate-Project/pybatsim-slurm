@@ -88,8 +88,12 @@ class _ListExternalDecisionComponentsAction(argparse.Action):
         for names in known_edcs_by_class.values():
             names.sort()
         for cls, names in known_edcs_by_class.items():
-            doc = inspect.getdoc(cls)
-            doc = doc.splitlines()[0] if doc is not None else cls.__qualname__
+            doc = cls.__doc__
+            doc = (
+                inspect.cleandoc(doc).splitlines()[0]
+                if doc is not None
+                else cls.__qualname__
+            )
             print(', '.join(names) + ':')
             print('  ' + doc)
         parser.exit()
