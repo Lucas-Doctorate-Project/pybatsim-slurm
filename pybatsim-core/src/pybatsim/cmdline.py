@@ -1,8 +1,8 @@
 """
-    pybatsim.cmdline
-    ~~~~~~~~~~~~~~~~
+pybatsim.cmdline
+~~~~~~~~~~~~~~~~
 
-    Command line interface.
+Command line interface.
 """
 
 import argparse
@@ -11,15 +11,16 @@ import inspect
 import io
 import json
 import logging
-import sys
 import textwrap
-import time
 
 from pybatsim import __version__
-from pybatsim.batsim.edc import ExternalDecisionComponent
 from pybatsim.batsim.batsim import Batsim
-from pybatsim.plugin import (SCHEDULER_ENTRY_POINT, find_ambiguous_scheduler_names,
-    find_plugin_schedulers)
+from pybatsim.batsim.edc import ExternalDecisionComponent
+from pybatsim.plugin import (
+    EDC_ENTRY_POINT,
+    find_ambiguous_edc_names,
+    find_plugin_edcs,
+)
 
 
 class _JsonStoreAction(argparse.Action):
@@ -30,12 +31,13 @@ class _JsonStoreAction(argparse.Action):
     expected.
     Otherwise, a valid JSON string is expected.
     """
+
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
         if nargs is not None:
             raise ValueError('nargs is not allowed')
         super().__init__(option_strings, dest, **kwargs)
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(self, _parser, namespace, values, _option_string=None):
         try:
             rawcontent = values.strip()
 
@@ -54,7 +56,7 @@ class _JsonStoreAction(argparse.Action):
             # raised by open()
             raise argparse.ArgumentError(
                 self,
-                f'unable to read \'{err.filename}\': {err.strerror.lower()}'
+                f"unable to read '{err.filename}': {err.strerror.lower()}",
             ) from None
         except json.JSONDecodeError:
             # raised by json.load(), subclass of ValueError
@@ -63,29 +65,29 @@ class _JsonStoreAction(argparse.Action):
             # raised by open() or json.load()
             raise argparse.ArgumentError(
                 self,
-                'incorrect encoding (expected utf-8)'
+                'incorrect encoding (expected utf-8)',
             ) from None
 
 
-class _ListSchedulersAction(argparse.Action):
+class _ListExternalDecisionComponentsAction(argparse.Action):
     def __init__(
         self,
         option_strings,
         dest=argparse.SUPPRESS,
         default=argparse.SUPPRESS,
-        help='list known schedulers and exit'  # pylint: disable=redefined-builtin
+        help='list known External Decision Components (EDCs) and exit',  # noqa: A002
     ):
         super().__init__(option_strings, dest, default=default, nargs=0, help=help)
 
-    def __call__(self, parser, namespace, values, option_string=None):
-        # organize names by actual scheduler class (some names can be aliases)
-        known_schedulers_by_class = collections.defaultdict(list)
-        for name, cls in find_plugin_schedulers():
-            known_schedulers_by_class[cls].append(name)
-        # display names of scheduler in alphabetical order
-        for names in known_schedulers_by_class.values():
+    def __call__(self, parser, _namespace, _values, _option_string=None):
+        # organize names by actual EDC class (some names can be aliases)
+        known_edcs_by_class = collections.defaultdict(list)
+        for name, cls in find_plugin_edcs():
+            known_edcs_by_class[cls].append(name)
+        # display names of EDC in alphabetical order
+        for names in known_edcs_by_class.values():
             names.sort()
-        for cls, names in known_schedulers_by_class.items():
+        for cls, names in known_edcs_by_class.items():
             doc = inspect.getdoc(cls)
             doc = doc.splitlines()[0] if doc is not None else cls.__qualname__
             print(', '.join(names) + ':')
@@ -95,16 +97,15 @@ class _ListSchedulersAction(argparse.Action):
 
 def _build_parser():
     parser = argparse.ArgumentParser(
-        description='Run a PyBatsim scheduler.',
+        description='Run a PyBatsim External Decision Component (EDC).',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=textwrap.dedent('''\
+        epilog=textwrap.dedent("""\
             exit status:
               %(prog)s can exit with the following return codes:
                 0  success
                 1  simulation failure
                 2  argument parsing error
-        '''
-        )
+        """),
     )
     parser.add_argument(
         '--version',
@@ -112,65 +113,80 @@ def _build_parser():
         version=__version__,
     )
     parser.add_argument(
-        '--list-schedulers',
-        action=_ListSchedulersAction,
+        '--list-external-decision-components',
+        '--list-edcs',
+        action=_ListExternalDecisionComponentsAction,
     )
     parser.add_argument(
-        '-t', '--timeout',
+        '-t',
+        '--timeout',
         default=5_000,
         type=int,
-        help='the timeout (in milliseconds) to wait for a Batsim answer, '
-             'supply a negative value to disable '
-             '(default: 5000)',
+        help=(
+            'the timeout (in milliseconds) to wait for a Batsim answer, '
+            'supply a negative value to disable '
+            '(default: 5000)'
+        ),
     )
     parser.add_argument(
-        '-s', '--socket-endpoint',
+        '-s',
+        '--socket-endpoint',
         default='tcp://*:28000',
-        help='address of Batsim socket, '
-             'formatted as \'protocol://interface:port\' '
-             '(default: tcp://*:28000)',
+        help=(
+            'address of Batsim socket, '
+            "formatted as 'protocol://interface:port' "
+            '(default: tcp://*:28000)'
+        ),
         metavar='ADDRESS',
     )
     parser.add_argument(
-        '-o', '--EDC-options',
+        '-o',
+        '--edc-options',
         default={},
         action=_JsonStoreAction,
-        help='options forwarded to the External Decision Component (default: empty dict), '
-             'either a JSON string (e.g., \'{"option": "value"}\') '
-             'or a @-prefixed JSON file containing the options (e.g., \'@options.json\')',
+        help=(
+            'options forwarded to the External Decision Component '
+            '(default: empty dict), '
+            'either a JSON string (e.g., \'{"option": "value"}\') '
+            "or a @-prefixed JSON file containing the options (e.g., '@options.json')"
+        ),
         metavar='[@]OPTIONS',
     )
-
     parser.add_argument(
         'edc_name',
-        choices=sorted(set(name for name, _ in find_plugin_schedulers())),
-        metavar='EDC_name',
-        help='name of the External Decision Component (EDC) to run.\n'
-             f'This should match a name registered under \'{SCHEDULER_ENTRY_POINT}\' entry point of the pyproject.toml file.'
+        choices=sorted({name for name, _ in find_plugin_edcs()}),
+        metavar='EDC',
+        help=(
+            'name of the External Decision Component (EDC) to run, '
+            f"as registered under '{EDC_ENTRY_POINT}' entry point"
+        ),
     )
     return parser
 
 
-def _abort_on_ambiguous_scheduler_name(name, *, parser):
-    ambiguous_names = find_ambiguous_scheduler_names()
+def _abort_on_ambiguous_edc_name(name, *, parser) -> None:
+    ambiguous_names = find_ambiguous_edc_names()
     if name in ambiguous_names:
-        errmsg = (
-            f'overlapping bindings in \'{SCHEDULER_ENTRY_POINT}\' entry point, '
+        err_msg = (
+            f"overlapping bindings in '{EDC_ENTRY_POINT}' entry point, "
             'check your packaging! '
-            f'\'{name}\' is defined more than once, and binds to: '
+            f"'{name}' is defined more than once, and binds to: "
         )
-        errmsg += ', '.join(ambiguous_names[name])
-        parser.error(errmsg)
+        err_msg += ', '.join(ambiguous_names[name])
+        parser.error(err_msg)
 
-def _find_scheduler_class(name):
-    """Lookup a scheduler by name. Return None if not found."""
-    for found_name, cls in find_plugin_schedulers():
+
+def _lookup_edc_class(name) -> type[ExternalDecisionComponent]:
+    """Lookup an EDC by name."""
+    for found_name, cls in find_plugin_edcs():
         if name == found_name:
             return cls
-    raise ValueError(f'Unknown scheduler name: {name}')
+
+    err_msg = f'unknown EDC name: {name}'
+    raise LookupError(err_msg)
 
 
-def main(args=None):
+def main(args=None) -> None:
     logging.basicConfig(level=logging.INFO)
 
     # retrieve arguments
@@ -178,13 +194,16 @@ def main(args=None):
     arguments = parser.parse_args(args)
     logging.debug(f'parsed arguments: {vars(arguments)}')
 
-    _abort_on_ambiguous_scheduler_name(arguments.edc_name, parser=parser)
+    # retrieve class of requested EDC
+    _abort_on_ambiguous_edc_name(arguments.edc_name, parser=parser)
+    edc_cls = _lookup_edc_class(arguments.edc_name)
 
     # TODO: handle exceptions from ØMQ
     # A ØMQ timeout usually means batsim has deadlocked/crashed
-    with Batsim(endpoint=arguments.socket_endpoint, timeout=arguments.timeout) as batsim:
-        edc_cls = _find_scheduler_class(arguments.edc_name)
-        edc: ExternalDecisionComponent = edc_cls(batsim, options=arguments.EDC_options)
+    with Batsim(
+        endpoint=arguments.socket_endpoint, timeout=arguments.timeout
+    ) as batsim:
+        edc: ExternalDecisionComponent = edc_cls(batsim, options=arguments.edc_options)
 
         batsim.register_EDC(edc)
 
