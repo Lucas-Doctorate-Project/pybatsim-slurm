@@ -16,7 +16,7 @@ from pybatsim.batsim.events import (
 )
 
 
-class RandomSched(ExternalDecisionComponent):
+class RandomScheduler(ExternalDecisionComponent):
     def __init__(self, batsim, options):
         self._batsim = batsim
         self._options = options
