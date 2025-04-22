@@ -44,7 +44,7 @@ pybatsim = "pybatsim.cmdline:main"
 # definition of officially maintained schedulers
 [project.entry-points."pybatsim.schedulers"]
 random = "pybatsim.schedulers.random:RandomScheduler"
-prototype = "pybatsim.schedulers.prototypeEDC:PrototypeEDC"
+prototype = "pybatsim.schedulers.prototype:PrototypeEDC"
 
 [tool.poetry]
 classifiers = [
