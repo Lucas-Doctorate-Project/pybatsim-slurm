@@ -54,7 +54,7 @@ class RandomScheduler(Scheduler):
             # trivial reject if job request more resources than cluster_size
             reject_event = RejectJobEvent(
                 timestamp=self._batsim.time,
-                job_id=job.job_id,
+                job=job,
             )
             self._batsim.add_event(reject_event)
         else:

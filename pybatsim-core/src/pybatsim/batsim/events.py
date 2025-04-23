@@ -201,13 +201,12 @@ class EDCHelloEvent(Event):
         return protocol_dict
 
 
-# TODO: consider using a Job rather than a job_id for the mapping
 class RejectJobEvent(Event):
-    job_id: str
+    job: Job
 
-    def __init__(self, timestamp, job_id):
+    def __init__(self, timestamp, job: Job):
         super().__init__(timestamp)
-        self.job_id = job_id
+        self.job = job
 
     @classmethod
     def from_protocol_dict(cls, _payload: dict) -> RejectJobEvent:
@@ -218,7 +217,7 @@ class RejectJobEvent(Event):
         payload = protocol_dict['event']
 
         payload |= {
-            'job_id': self.job_id,
+            'job_id': self.job.job_id,
         }
 
         return protocol_dict
