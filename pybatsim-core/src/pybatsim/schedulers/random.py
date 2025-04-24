@@ -19,7 +19,6 @@ from pybatsim.batsim import (
 
 class RandomScheduler(Scheduler):
     waiting_jobs: set[Job] = set()
-    running_jobs: dict[str, Job] = {}
     idle_resources: ProcSet | None = None
     cluster_size: int | None = None
     _generator: Random
@@ -38,7 +37,11 @@ class RandomScheduler(Scheduler):
             edc_version='0.0.0',
             edc_commit='',
         )
-        self._batsim.add_event(edc_hello_event)
+        self._batsim.append_event(edc_hello_event)
+
+    def handle_msg(self, msg) -> None:
+        super().handle_msg(msg)
+        self.schedule_jobs()
 
     def begin_simulation(self, event: SimulationBeginsEvent) -> None:
         self.cluster_size = event.computation_host_number
@@ -51,22 +54,17 @@ class RandomScheduler(Scheduler):
         job = event.job
 
         if job.resource_request > self.cluster_size:
-            # trivial reject if job request more resources than cluster_size
+            # trivial reject if job requests more resources than cluster_size
             reject_event = RejectJobEvent(
                 timestamp=self._batsim.time,
                 job=job,
             )
-            self._batsim.add_event(reject_event)
+            self._batsim.append_event(reject_event)
         else:
             self.waiting_jobs.add(job)
 
     def complete_job(self, event: JobCompletedEvent) -> None:
-        job = self.running_jobs.pop(event.job_id)
-        self.idle_resources |= job.allocation
-
-    def handle_msg(self, msg) -> None:
-        super().handle_msg(msg)
-        self.schedule_jobs()
+        self.idle_resources |= event.job.allocation
 
     def schedule_jobs(self):
         scheduled_jobs = []
@@ -87,9 +85,8 @@ class RandomScheduler(Scheduler):
 
         # send the list of scheduled jobs to Batsim
         for job in scheduled_jobs:
-            self.running_jobs[job.job_id] = job
             execute_event = ExecuteJobEvent(
                 timestamp=self._batsim.time,
                 job=job,
             )
-            self._batsim.add_event(execute_event)
+            self._batsim.append_event(execute_event)

@@ -9,7 +9,15 @@ from collections import deque
 from procset import ProcSet
 
 from .core import SimulationMetadata
-from .events import Event, EDCHelloEvent, SimulationEndsEvent
+from .events import (
+    Event,
+    EDCHelloEvent,
+    JobCompletedEvent,
+    JobSubmittedEvent,
+    RejectJobEvent,
+    SimulationEndsEvent,
+)
+from .job import Job
 
 
 # TODO: Implement public API to access SimulationMetadata
@@ -28,10 +36,12 @@ class Batsim:
         self._edc = None
 
         self._time = 0
-        self._received_SimulationEnds = False
         self._simulation_metadata: SimulationMetadata = SimulationMetadata()
         self._rx: deque[Event] = deque()
         self._tx: deque[Event] = deque()
+
+        self._received_SimulationEnds: bool = False
+        self._alive_jobs: dict[str, Job] = {}
 
     def __setup_zmq(self):
         context = zmq.Context()
@@ -91,7 +101,8 @@ class Batsim:
         data_size = int.from_bytes(raw_msg[:4], byteorder=sys.byteorder)
         data: bytes = raw_msg[4:]
         if len(raw_msg) != 4 + data_size:
-            raise ValueError(f"Invalid data_size: received init message is {len(raw_msg)} bytes long, read data is {data_size} bytes long (should be 4 bytes less).")
+            raise ValueError(f"Invalid data_size: received init message is {len(raw_msg)} bytes long, "
+                             f"read data is {data_size} bytes long (should be 4 bytes less).")
 
         self._simulation_metadata.edc_init_str = data[:data_size].decode('utf-8')
 
@@ -152,24 +163,38 @@ class Batsim:
     def pop_event(self):
         return self._rx.popleft()
 
-    # XXX: rename to {enqueue,append}_event to give a better sense of what happens?
-    def add_event(self, event):
+    def append_event(self, event):
+        if isinstance(event, RejectJobEvent):
+            # remove from alive_jobs as this is the last possible event from Batsim
+            self._alive_jobs.pop(event.job.job_id)
+
         self._tx.append(event)
 
-    '''
-    All functions for serialisation/deserialisation of events from the batprotocol goes here
-    '''
-    def deserialise_message(self, json_msg):
-        self._time = json_msg["now"]
-        message = deque()
-        for json_event in json_msg["events"]:
-            print("--- Received event of type", json_event["event_type"])
-            # TODO: properly deserialise the JSON event
-            event = Event.from_protocol_dict(json_event)
-            message.append(event)
+    def deserialise_event(self, protocol_dict) -> Event:
+        # hacky: inject jobs in protocol_dict when relevant
+        if protocol_dict['event_type'] == 'JobCompletedEvent':
+            # remove from alive_jobs as this is the last possible event from Batsim
+            job = self._alive_jobs.pop(protocol_dict['event']['job_id'])
+            protocol_dict['__pybatsim_job'] = job
 
-            # XXX: this should not be done here, but rather in the handle of the event
-            self._received_SimulationEnds = isinstance(event, SimulationEndsEvent)
+        event = Event.from_protocol_dict(protocol_dict)
+
+        if isinstance(event, SimulationEndsEvent):
+            self._received_SimulationEnds = True
+        elif isinstance(event, JobSubmittedEvent):
+            # TODO: handle case where job is a dynamic job and Batsim is asked to acknowledge dynamic jobs
+            self._alive_jobs[event.job.job_id] = event.job
+
+        return event
+
+    def deserialise_message(self, protocol_dict) -> deque[Event]:
+        self._time = protocol_dict["now"]
+
+        message: deque[Event] = deque()
+        for event_dict in protocol_dict["events"]:
+            print("--- Received event of type", event_dict["event_type"])
+            event = self.deserialise_event(event_dict)
+            message.append(event)
 
         return message
 

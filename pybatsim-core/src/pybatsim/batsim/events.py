@@ -124,7 +124,7 @@ class JobSubmittedEvent(Event):
     def from_protocol_dict(cls, payload: dict) -> JobSubmittedEvent:
         return cls(
             timestamp=payload['timestamp'],
-            job=Job.from_json_dict(payload['event']),  # TODO: harmonize constructor name
+            job=Job.from_protocol_dict(payload['event']),
         )
 
     def to_protocol_dict(self) -> dict:
@@ -133,21 +133,22 @@ class JobSubmittedEvent(Event):
 
 # TODO: consider using a Job rather than a job_id for the mapping
 class JobCompletedEvent(Event):
-    job_id: str
+    job: Job
     state: Any  # XXX: assign real type
-    return_code: Any  # XXX: assign real type
+    return_code: int
 
-    def __init__(self, timestamp, job_id, state, return_code):
+    def __init__(self, timestamp, job, state, return_code):
         super().__init__(timestamp)
-        self.job_id = job_id
+        self.job = job
         self.state = state
         self.return_code = return_code
 
     @classmethod
     def from_protocol_dict(cls, payload: dict) -> JobCompletedEvent:
+        assert payload['__pybatsim_job'].job_id == payload['event']['job_id']
         return cls(
             timestamp=payload['timestamp'],
-            job_id=payload['event']['job_id'],
+            job=payload['__pybatsim_job'],  # injected by deserialisation
             state=payload['event']['state'],
             return_code=payload['event']['return_code'],
         )

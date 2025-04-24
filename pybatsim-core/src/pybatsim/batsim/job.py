@@ -14,7 +14,7 @@ class Job:
 
 
     @classmethod
-    def from_json_dict(cls, json_dict):
+    def from_protocol_dict(cls, json_dict):
         return cls(json_dict["job_id"],
                    json_dict["submission_time"],
                    json_dict["job"]["resource_request"],
