@@ -33,23 +33,23 @@ class Scheduler(ExternalDecisionComponent):
 
     def handle_msg(self, msg) -> None:
         for event in msg:
-            self._handle_event(event)
+            self._dispatch(event)
 
-    def _handle_event(self, event: Event) -> None:
+    def _dispatch(self, event: Event) -> None:
         # we should not receive send-only events:
         # this could be done better with differentiated base classes
         match event:
             # receive-only events
             case JobSubmittedEvent():
-                self.submit_job(event)
+                self.handle_submitted_job(event)
             case JobCompletedEvent():
-                self.complete_job(event)
+                self.handle_completed_job(event)
             case SimulationBeginsEvent():
-                self.begin_simulation(event)
+                self.handle_simulation_begin(event)
             case SimulationEndsEvent():
-                self.end_simulation(event)
+                self.handle_simulation_end(event)
             case AllStaticJobsHaveBeenSubmittedEvent():
-                pass
+                self.handle_no_more_static_jobs(event)
 
             # send-only events
             case EDCHelloEvent() | RejectJobEvent() | ExecuteJobEvent():
@@ -62,16 +62,19 @@ class Scheduler(ExternalDecisionComponent):
                 raise TypeError(err_msg)
 
     @abstractmethod
-    def begin_simulation(self, event: SimulationBeginsEvent) -> None: ...
+    def handle_simulation_begin(self, event: SimulationBeginsEvent) -> None: ...
 
     @abstractmethod
-    def end_simulation(self, event: SimulationEndsEvent) -> None: ...
+    def handle_simulation_end(self, event: SimulationEndsEvent) -> None: ...
 
     @abstractmethod
-    def submit_job(self, event: JobSubmittedEvent) -> None: ...
+    def handle_submitted_job(self, event: JobSubmittedEvent) -> None: ...
 
     @abstractmethod
-    def complete_job(self, event: JobCompletedEvent) -> None: ...
+    def handle_completed_job(self, event: JobCompletedEvent) -> None: ...
+
+    def handle_no_more_static_jobs(self, event: AllStaticJobsHaveBeenSubmittedEvent):
+        pass
 
     def finalize(self):
         pass

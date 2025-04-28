@@ -43,14 +43,14 @@ class RandomScheduler(Scheduler):
         super().handle_msg(msg)
         self.schedule_jobs()
 
-    def begin_simulation(self, event: SimulationBeginsEvent) -> None:
+    def handle_simulation_begin(self, event: SimulationBeginsEvent) -> None:
         self.cluster_size = event.computation_host_number
         self.idle_resources = ProcSet((0, self.cluster_size - 1))
 
-    def end_simulation(self, event: SimulationEndsEvent) -> None:
+    def handle_simulation_end(self, event: SimulationEndsEvent) -> None:
         pass
 
-    def submit_job(self, event: JobSubmittedEvent) -> None:
+    def handle_submitted_job(self, event: JobSubmittedEvent) -> None:
         job = event.job
 
         if job.resource_request > self.cluster_size:
@@ -63,7 +63,7 @@ class RandomScheduler(Scheduler):
         else:
             self.waiting_jobs.add(job)
 
-    def complete_job(self, event: JobCompletedEvent) -> None:
+    def handle_completed_job(self, event: JobCompletedEvent) -> None:
         self.idle_resources |= event.job.allocation
 
     def schedule_jobs(self):
