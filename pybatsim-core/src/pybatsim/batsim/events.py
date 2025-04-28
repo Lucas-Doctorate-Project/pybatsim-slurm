@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, Final
+from typing import Any, ClassVar, Final, override
 
 from .core import SimulationMetadata
 from .job import Job
@@ -43,19 +43,21 @@ List of batprotocol events:
 '''
 
 
-# TODO: consider using different base classes (and MRO) to distinguish between
-# send-only, receive-only, and send-receive events
+# abstract base classes  -------------------------------------------------------
+
+
 class Event:
-    __batprotocol_events: Final[ClassVar[dict[str, Event]]] = {}
+    _batprotocol_events: Final[ClassVar[dict[str, type[Event]]]] = {}
 
     timestamp: float
 
     def __new__(cls, *_args, **_kwargs):
-        # ensure Event is not instantiated, see:
+        # ensure Event, RxEvent or TxEvent are not instantiated, see:
         # - https://stackoverflow.com/a/7990308
         # - https://docs.python.org/3/reference/datamodel.html#object.__new__
-        if cls is Event:
-            raise TypeError('Cannot instantiate abstract class Event')
+        if cls in (Event, RxEvent, TxEvent):
+            err_msg = f'Cannot instantiate abstract class {cls.__name__}'
+            raise TypeError(err_msg)
 
         # We pass only cls to object.__new__() as we also define __init__().
         # However, we need to keep args and kwargs in the signature as they
@@ -64,16 +66,21 @@ class Event:
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls.__batprotocol_events[cls.__name__] = cls
+        cls._batprotocol_events[cls.__name__] = cls
 
     def __init__(self, timestamp):
         self.timestamp = timestamp
 
+
+class RxEvent(Event):
     @classmethod
-    def from_protocol_dict(cls, payload: dict) -> Event:
-        concrete_cls = cls.__batprotocol_events[payload['event_type']]
+    def from_protocol_dict(cls, payload: dict) -> RxEvent:
+        concrete_cls = cls._batprotocol_events[payload['event_type']]
+        assert issubclass(concrete_cls, RxEvent), 'expected a receive event'
         return concrete_cls.from_protocol_dict(payload)
 
+
+class TxEvent(Event):
     def to_protocol_dict(self) -> dict:
         return {
             'timestamp': self.timestamp,
@@ -82,15 +89,18 @@ class Event:
         }
 
 
-# receive-only events: Batsim → EDC
+# concrete classes  ------------------------------------------------------------
 
-class SimulationBeginsEvent(Event):
+
+class SimulationBeginsEvent(RxEvent):
     computation_host_number: int
 
+    @override
     def __init__(self, timestamp, computation_host_number):
         super().__init__(timestamp)
         self.computation_host_number = computation_host_number
 
+    @override
     @classmethod
     def from_protocol_dict(cls, payload: dict) -> SimulationBeginsEvent:
         return cls(
@@ -98,28 +108,25 @@ class SimulationBeginsEvent(Event):
             computation_host_number=payload['event']['computation_host_number'],
         )
 
-    def to_protocol_dict(self) -> dict:
-        raise TypeError('SimulationBeginsEvent is a receive-only event')
 
-
-class SimulationEndsEvent(Event):
+class SimulationEndsEvent(RxEvent):
+    @override
     @classmethod
     def from_protocol_dict(cls, payload: dict) -> SimulationEndsEvent:
         return cls(
             timestamp=payload['timestamp'],
         )
 
-    def to_protocol_dict(self) -> dict:
-        raise TypeError('SimulationEndsEvent is a receive-only event')
 
-
-class JobSubmittedEvent(Event):
+class JobSubmittedEvent(RxEvent):
     job: Job
 
+    @override
     def __init__(self, timestamp, job):
         super().__init__(timestamp)
         self.job = job
 
+    @override
     @classmethod
     def from_protocol_dict(cls, payload: dict) -> JobSubmittedEvent:
         return cls(
@@ -127,22 +134,20 @@ class JobSubmittedEvent(Event):
             job=Job.from_protocol_dict(payload['event']),
         )
 
-    def to_protocol_dict(self) -> dict:
-        raise TypeError('JobSubmittedEvent is a receive-only event')
 
-
-# TODO: consider using a Job rather than a job_id for the mapping
-class JobCompletedEvent(Event):
+class JobCompletedEvent(RxEvent):
     job: Job
     state: Any  # XXX: assign real type
     return_code: int
 
+    @override
     def __init__(self, timestamp, job, state, return_code):
         super().__init__(timestamp)
         self.job = job
         self.state = state
         self.return_code = return_code
 
+    @override
     @classmethod
     def from_protocol_dict(cls, payload: dict) -> JobCompletedEvent:
         assert payload['__pybatsim_job'].job_id == payload['event']['job_id']
@@ -153,30 +158,24 @@ class JobCompletedEvent(Event):
             return_code=payload['event']['return_code'],
         )
 
-    def to_protocol_dict(self) -> dict:
-        raise TypeError('JobCompletedEvent is a receive-only event')
 
-
-class AllStaticJobsHaveBeenSubmittedEvent(Event):
+class AllStaticJobsHaveBeenSubmittedEvent(RxEvent):
+    @override
     @classmethod
     def from_protocol_dict(cls, payload: dict) -> AllStaticJobsHaveBeenSubmittedEvent:
         return cls(
             timestamp=payload['timestamp'],
         )
 
-    def to_protocol_dict(self) -> dict:
-        raise TypeError('AllStaticJobsHaveBeenSubmittedEvent is a receive-only event')
 
-
-# send-only events: EDC → Batsim
-
-class EDCHelloEvent(Event):
+class EDCHelloEvent(TxEvent):
     simulation_metadata: SimulationMetadata
     # TODO: consider integrating edc_* in simulation_metadata
     edc_name: str
     edc_version: str
     edc_commit: str
 
+    @override
     def __init__(self, timestamp, simulation_metadata, edc_name, edc_version, edc_commit):
         super().__init__(timestamp)
         self.simulation_metadata = simulation_metadata
@@ -184,10 +183,7 @@ class EDCHelloEvent(Event):
         self.edc_version = edc_version
         self.edc_commit = edc_commit
 
-    @classmethod
-    def from_protocol_dict(cls, _payload: dict) -> EDCHelloEvent:
-        raise TypeError('EDCHelloEvent is a send-only event')
-
+    @override
     def to_protocol_dict(self) -> dict:
         protocol_dict = super().to_protocol_dict()
         payload = protocol_dict['event']
@@ -202,17 +198,15 @@ class EDCHelloEvent(Event):
         return protocol_dict
 
 
-class RejectJobEvent(Event):
+class RejectJobEvent(TxEvent):
     job: Job
 
+    @override
     def __init__(self, timestamp, job: Job):
         super().__init__(timestamp)
         self.job = job
 
-    @classmethod
-    def from_protocol_dict(cls, _payload: dict) -> RejectJobEvent:
-        raise TypeError('RejectJobEvent is a send-only event')
-
+    @override
     def to_protocol_dict(self) -> dict:
         protocol_dict = super().to_protocol_dict()
         payload = protocol_dict['event']
@@ -224,13 +218,14 @@ class RejectJobEvent(Event):
         return protocol_dict
 
 
-class ExecuteJobEvent(Event):
+class ExecuteJobEvent(TxEvent):
     job: Job
     # TODO: merge executor_placement, profile_allocation_override, storage_placement in PlacementPolicy object
     executor_placement: Job.ExecutorPlacement
     profile_allocation_override: Any | None = None
     storage_placement: Any | None = None
 
+    @override
     def __init__(self, timestamp, job, executor_placement=None, profile_allocation_override=None, storage_placement=None):
         super().__init__(timestamp)
         self.job = job
@@ -238,10 +233,7 @@ class ExecuteJobEvent(Event):
         self.profile_allocation_override = profile_allocation_override
         self.storage_placement = storage_placement
 
-    @classmethod
-    def from_protocol_dict(cls, _payload: dict) -> ExecuteJobEvent:
-        raise TypeError('ExecuteJobEvent is a send-only event')
-
+    @override
     def to_protocol_dict(self) -> dict:
         protocol_dict = super().to_protocol_dict()
         payload = protocol_dict['event']

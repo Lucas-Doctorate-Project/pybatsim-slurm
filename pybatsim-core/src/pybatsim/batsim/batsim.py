@@ -15,7 +15,9 @@ from .events import (
     JobCompletedEvent,
     JobSubmittedEvent,
     RejectJobEvent,
+    RxEvent,
     SimulationEndsEvent,
+    TxEvent,
 )
 from .job import Job
 
@@ -37,8 +39,8 @@ class Batsim:
 
         self._time = 0
         self._simulation_metadata: SimulationMetadata = SimulationMetadata()
-        self._rx: deque[Event] = deque()
-        self._tx: deque[Event] = deque()
+        self._rx: deque[RxEvent] = deque()
+        self._tx: deque[TxEvent] = deque()
 
         self._received_SimulationEnds: bool = False
         self._alive_jobs: dict[str, Job] = {}
@@ -163,21 +165,21 @@ class Batsim:
     def pop_event(self):
         return self._rx.popleft()
 
-    def append_event(self, event):
+    def append_event(self, event: TxEvent):
         if isinstance(event, RejectJobEvent):
             # remove from alive_jobs as this is the last possible event from Batsim
             self._alive_jobs.pop(event.job.job_id)
 
         self._tx.append(event)
 
-    def deserialise_event(self, protocol_dict) -> Event:
+    def deserialise_event(self, protocol_dict) -> RxEvent:
         # hacky: inject jobs in protocol_dict when relevant
         if protocol_dict['event_type'] == 'JobCompletedEvent':
             # remove from alive_jobs as this is the last possible event from Batsim
             job = self._alive_jobs.pop(protocol_dict['event']['job_id'])
             protocol_dict['__pybatsim_job'] = job
 
-        event = Event.from_protocol_dict(protocol_dict)
+        event = RxEvent.from_protocol_dict(protocol_dict)
 
         if isinstance(event, SimulationEndsEvent):
             self._received_SimulationEnds = True
