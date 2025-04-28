@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-import sys
-import zmq
 import json
-import logging
-
+import sys
 from collections import deque
-from procset import ProcSet
+
+import zmq
 
 from .core import SimulationMetadata
 from .events import (
-    Event,
     EDCHelloEvent,
-    JobCompletedEvent,
     JobSubmittedEvent,
     RejectJobEvent,
     RxEvent,
@@ -27,8 +23,8 @@ class Batsim:
     # SERIALIZATION_FORMAT_BINARY = 1  # unsupported
     SERIALIZATION_FORMAT_JSON = 2
 
-    WORKLOAD_JOB_SEPARATOR = "!"
-    #ATTEMPT_JOB_SEPARATOR = "#" # Used when resubmitting job
+    WORKLOAD_JOB_SEPARATOR = '!'
+    # ATTEMPT_JOB_SEPARATOR = "#" # Used when resubmitting job
 
     def __init__(self, *, endpoint: str, timeout: int | None = None):
         self._endpoint: str = endpoint
@@ -50,9 +46,9 @@ class Batsim:
         context.setsockopt(zmq.RCVTIMEO, self._timeout)
 
         self._zmq_socket = context.socket(socket_type=zmq.REP)
-
         self._zmq_socket.bind(self._endpoint)
-        self._endpoint = self._zmq_socket.getsockopt(zmq.LAST_ENDPOINT) # Get the real endpoint without wilcards
+        # replace _endpoint with the actual endpoint in use (no wildcard)
+        self._endpoint = self._zmq_socket.getsockopt(zmq.LAST_ENDPOINT)
 
     def __teardown_zmq(self):
         self._zmq_socket.unbind(self._endpoint)
@@ -89,22 +85,26 @@ class Batsim:
     def simulation_metadata(self):
         return self._simulation_metadata
 
-
     def _recv_init_msg(self) -> None:
         # Batsim sends the first message (init message)
         # message format:
         # 1. init_data_size(uint32)
-        # 2. init_data(init_data_size bytes): EDC initialization string (forwarded from Batsim CLI)
-        assert self._zmq_socket is not None, "Uninitialized _zmq_socket"
+        # 2. init_data(init_data_size bytes):
+        #    EDC initialization string forwarded from Batsim CLI
+        assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
 
         raw_msg: bytes = self._zmq_socket.recv()
-        assert raw_msg is not None, "Invalid init message"
+        assert raw_msg is not None, 'invalid init message'
 
         data_size = int.from_bytes(raw_msg[:4], byteorder=sys.byteorder)
         data: bytes = raw_msg[4:]
         if len(raw_msg) != 4 + data_size:
-            raise ValueError(f"Invalid data_size: received init message is {len(raw_msg)} bytes long, "
-                             f"read data is {data_size} bytes long (should be 4 bytes less).")
+            err_msg = (
+                'invalid data_size: '
+                f'received init message is {len(raw_msg)} bytes long, '
+                f'read data is {data_size} bytes long (should be 4 bytes less)'
+            )
+            raise ValueError(err_msg)
 
         self._simulation_metadata.edc_init_str = data[:data_size].decode('utf-8')
 
@@ -113,7 +113,7 @@ class Batsim:
         # message format:
         # 1. serialization_format(uint32)
         # 2. serialized message with the EDCHelloEvent
-        assert self._zmq_socket is not None, "uninitialized _zmq_socket"
+        assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
 
         # check _tx buffer contains a single event of type EDCHelloEvent
         if not isinstance(self._tx[0], EDCHelloEvent):
@@ -127,7 +127,9 @@ class Batsim:
             raise ValueError(err_msg)
 
         # build sequence of bytes to send
-        serialization_format: bytes = self.SERIALIZATION_FORMAT_JSON.to_bytes(4, byteorder='little')
+        serialization_format: bytes = self.SERIALIZATION_FORMAT_JSON.to_bytes(
+            4, byteorder='little'
+        )
         protocol_dict: dict = self.serialize_msg()
         raw_msg: str = json.dumps(protocol_dict)
         wire_msg: bytes = serialization_format + raw_msg.encode()
@@ -151,7 +153,7 @@ class Batsim:
         return self._received_SimulationEnds
 
     def recv_msg(self) -> None:
-        assert self._zmq_socket is not None, "Expected _zmq_socket to be initialized"
+        assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
 
         try:
             raw_msg = self._zmq_socket.recv_string()
@@ -161,7 +163,7 @@ class Batsim:
             #   the length of sent messages.
             #   This would allow to use self._zmq_socket.recv_json()
             protocol_dict = json.loads(raw_msg[:-1])  # drop terminating null byte
-            print(f"Received Batsim message: {protocol_dict}")
+            print(f'Received Batsim message: {protocol_dict}')
             self.deserialize_msg(protocol_dict)
 
         except Exception:
@@ -169,14 +171,14 @@ class Batsim:
             raise
 
     def dispatch_msg(self) -> None:
-        # Triggers message handling by registered EDC
-        assert self._edc is not None, "Expected _edc to be initialized"
+        """Trigger handling of the received message by the registered EDC."""
+        assert self._edc is not None, 'uninitialized _edc'
         self._edc.handle_msg(self._rx)
 
     def send_msg(self):
         """Send the built answer message to Batsim."""
         protocol_dict = self.serialize_msg()
-        print(f"Sending to Batsim:\n{protocol_dict}")
+        print(f'Sending to Batsim:\n{protocol_dict}')
         self._zmq_socket.send_json(protocol_dict)
         self._tx.clear()
 
@@ -184,8 +186,9 @@ class Batsim:
         return self._rx.popleft()
 
     def append_event(self, event: TxEvent):
+        """Add event to the next message for Batsim."""
         if isinstance(event, RejectJobEvent):
-            # remove from alive_jobs as this is the last possible event from Batsim
+            # remove from alive_jobs as this is the last possible event sent to Batsim
             self._alive_jobs.pop(event.job.job_id)
 
         self._tx.append(event)
@@ -202,7 +205,8 @@ class Batsim:
         if isinstance(event, SimulationEndsEvent):
             self._received_SimulationEnds = True
         elif isinstance(event, JobSubmittedEvent):
-            # TODO: handle case where job is a dynamic job and Batsim is asked to acknowledge dynamic jobs
+            # TODO: handle case where job is a dynamic job and Batsim is asked
+            # to acknowledge dynamic jobs
             self._alive_jobs[event.job.job_id] = event.job
 
         return event
@@ -210,17 +214,17 @@ class Batsim:
     def deserialize_msg(self, protocol_dict) -> None:
         self._rx.clear()  # drop previous msg
 
-        assert self._time <= protocol_dict["now"], "decreasing simulation time"
-        self._time = protocol_dict["now"]
+        assert self._time <= protocol_dict['now'], 'decreasing simulation time'
+        self._time = protocol_dict['now']
 
         # fill _rx buffer with the events received in current msg
-        for event_dict in protocol_dict["events"]:
-            print("--- Received event of type", event_dict["event_type"])
+        for event_dict in protocol_dict['events']:
+            print('--- Received event of type', event_dict['event_type'])
             event = self.deserialize_event(event_dict)
             self._rx.append(event)
 
     def serialize_msg(self) -> dict:
         return {
-            "now": self._time,
-            "events": [event.to_protocol_dict() for event in self._tx]
+            'now': self._time,
+            'events': [event.to_protocol_dict() for event in self._tx],
         }

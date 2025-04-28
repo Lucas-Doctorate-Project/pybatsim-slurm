@@ -72,7 +72,7 @@ class SimulationMetadata:
 
     def to_protocol_dict(self):
         return {
-            "batprotocol_version": self.batprotocol_version, #TODO
+            "batprotocol_version": self.batprotocol_version,
             "requested_simulation_features": self.requested_features.to_protocol_dict(),
             "scheduling_constraints": {
                 "compute_sharing": self.compute_sharing,
