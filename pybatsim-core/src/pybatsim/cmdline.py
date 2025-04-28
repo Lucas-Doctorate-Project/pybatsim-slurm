@@ -208,7 +208,7 @@ def main(args=None) -> None:
     ) as batsim:
         edc: ExternalDecisionComponent = edc_cls(batsim, options=arguments.edc_options)
 
-        batsim.register_EDC(edc)
+        batsim.register_edc(edc)
 
         while not batsim.is_simulation_finished():
             batsim.recv_msg()

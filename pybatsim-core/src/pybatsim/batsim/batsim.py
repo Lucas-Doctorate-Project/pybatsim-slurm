@@ -108,27 +108,43 @@ class Batsim:
 
         self._simulation_metadata.edc_init_str = data[:data_size].decode('utf-8')
 
+    def _send_edc_hello_msg(self) -> None:
+        # prepare and send the first EDC message (answer to the init message)
+        # message format:
+        # 1. serialization_format(uint32)
+        # 2. serialized message with the EDCHelloEvent
+        assert self._zmq_socket is not None, "uninitialized _zmq_socket"
 
-    def register_EDC(self, edc):
+        # check _tx buffer contains a single event of type EDCHelloEvent
+        if not isinstance(self._tx[0], EDCHelloEvent):
+            err_msg = (
+                f"EDC asked to send '{type(self._tx[0]).__name__}', "
+                "expected 'EDCHelloEvent'"
+            )
+            raise TypeError(err_msg)
+        if len(self._tx) != 1:
+            err_msg = "EDC hello message must contain a single 'EDCHelloEvent'"
+            raise ValueError(err_msg)
+
+        # build sequence of bytes to send
+        serialization_format: bytes = self.SERIALIZATION_FORMAT_JSON.to_bytes(4, byteorder='little')
+        protocol_dict: dict = self.serialize_msg()
+        raw_msg: str = json.dumps(protocol_dict)
+        wire_msg: bytes = serialization_format + raw_msg.encode()
+
+        self._zmq_socket.send(wire_msg)
+        self._tx.clear()
+
+    def register_edc(self, edc) -> None:
         self._edc = edc
-
-        edc_hello_event = self._tx[0]
-
-        if not isinstance(edc_hello_event, EDCHelloEvent):
-            raise ValueError(f"EDC asked to send '{type(edc_hello_event).__name__}', expected 'EDCHelloEvent'")
-
-        if (len(self._tx) != 1):
-            raise ProtocolError(f"The EDC Hello message must contain a single 'EDCHelloEvent'")
-
-        # Send message prefixed by the serialisation_flag
-        flag_part = self.SERIALIZATION_FORMAT_JSON.to_bytes(4, byteorder=sys.byteorder)
-        json_part = json.dumps(self.serialise_message(self._tx))
-        msg = flag_part + json_part.encode()
-
-        print(f"Sending to Batsim:\n{json_part}")
-        self._zmq_socket.send(msg)
-        self._tx = deque()
-
+        # XXX:
+        #   This sequence is fragile as it requires:
+        #   1. the EDC to append the hello event during its initialization
+        #   2. no other creation of messages before registering
+        #
+        #   Consider introducing a required method craft_hello_event on
+        #   ExternalDecisionComponent.
+        self._send_edc_hello_msg()
 
     def is_simulation_finished(self):
         # Whether the even SimulationEnds has been received yet
@@ -139,16 +155,18 @@ class Batsim:
 
         try:
             raw_msg = self._zmq_socket.recv_string()
-            # The batprotocol currently adds a \0 at the end of each message formatted in JSON
-            # Issue openned in batprotocol: https://framagit.org/batsim/batprotocol/-/issues/3
-            #json_msg = self._zmq_socket.recv_json()
-            json_msg = json.loads(raw_msg[:-1])
-            print(f"Received Batsim message:\n{json_msg}")
+            # XXX: https://framagit.org/batsim/batprotocol/-/issues/3
+            #   The batprotocol appends a null byte after each sent JSON message.
+            #   Consider removing the null byte from the protocol as ØMQ handles
+            #   the length of sent messages.
+            #   This would allow to use self._zmq_socket.recv_json()
+            protocol_dict = json.loads(raw_msg[:-1])  # drop terminating null byte
+            print(f"Received Batsim message: {protocol_dict}")
+            self.deserialize_msg(protocol_dict)
 
-            self._rx = self.deserialise_message(json_msg)
-        # TODO handle json.loads exception and deserialisation exceptions
-        except zmq.error.Again: # Timeout
-            raise ValueError("[PYBATSIM]: Socket timeout reached, Batsim is not responding (maybe deadlocked)")
+        except Exception:
+            # TODO: handle json.loads and deserialization exceptions
+            raise
 
     def dispatch_msg(self) -> None:
         # Triggers message handling by registered EDC
@@ -156,13 +174,13 @@ class Batsim:
         self._edc.handle_msg(self._rx)
 
     def send_msg(self):
-        # Sends answer message to batsim
-        json_msg = self.serialise_message(self._tx)
-        print(f"Sending to Batsim:\n{json_msg}")
-        self._zmq_socket.send_json(json_msg)
-        self._tx = deque()
+        """Send the built answer message to Batsim."""
+        protocol_dict = self.serialize_msg()
+        print(f"Sending to Batsim:\n{protocol_dict}")
+        self._zmq_socket.send_json(protocol_dict)
+        self._tx.clear()
 
-    def pop_event(self):
+    def pop_event(self) -> RxEvent:
         return self._rx.popleft()
 
     def append_event(self, event: TxEvent):
@@ -172,7 +190,7 @@ class Batsim:
 
         self._tx.append(event)
 
-    def deserialise_event(self, protocol_dict) -> RxEvent:
+    def deserialize_event(self, protocol_dict) -> RxEvent:
         # hacky: inject jobs in protocol_dict when relevant
         if protocol_dict['event_type'] == 'JobCompletedEvent':
             # remove from alive_jobs as this is the last possible event from Batsim
@@ -189,20 +207,20 @@ class Batsim:
 
         return event
 
-    def deserialise_message(self, protocol_dict) -> deque[Event]:
+    def deserialize_msg(self, protocol_dict) -> None:
+        self._rx.clear()  # drop previous msg
+
+        assert self._time <= protocol_dict["now"], "decreasing simulation time"
         self._time = protocol_dict["now"]
 
-        message: deque[Event] = deque()
+        # fill _rx buffer with the events received in current msg
         for event_dict in protocol_dict["events"]:
             print("--- Received event of type", event_dict["event_type"])
-            event = self.deserialise_event(event_dict)
-            message.append(event)
+            event = self.deserialize_event(event_dict)
+            self._rx.append(event)
 
-        return message
-
-    def serialise_message(self, event_list):
-        new_msg = {
+    def serialize_msg(self) -> dict:
+        return {
             "now": self._time,
-            "events": [e.to_protocol_dict() for e in self._tx]
+            "events": [event.to_protocol_dict() for event in self._tx]
         }
-        return new_msg
