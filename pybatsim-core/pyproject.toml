@@ -41,8 +41,8 @@ issues = "https://gitlab.inria.fr/batsim/pybatsim/-/issues"
 [project.scripts]
 pybatsim = "pybatsim.cmdline:main"
 
-# definition of officially maintained schedulers
-[project.entry-points."pybatsim.schedulers"]
+# definition of officially maintained external decision components (EDCs)
+[project.entry-points."pybatsim.external_decision_components"]
 random = "pybatsim.schedulers.random:RandomScheduler"
 prototype = "pybatsim.schedulers.prototype:PrototypeEDC"
 

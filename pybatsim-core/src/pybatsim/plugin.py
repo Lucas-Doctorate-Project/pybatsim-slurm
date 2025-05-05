@@ -12,7 +12,7 @@ defined in the module :py:mod:`yourscheduler`.
 
 .. code-block:: cfg
 
-   [pybatsim.schedulers]
+   [pybatsim.external_decision_components]
    yourschedulername = yourscheduler:YourScheduler
 
 
@@ -23,7 +23,7 @@ register an EDC.
 import collections
 from importlib.metadata import entry_points
 
-EDC_ENTRY_POINT = 'pybatsim.schedulers'
+EDC_ENTRY_POINT = 'pybatsim.external_decision_components'
 
 
 def find_plugin_edcs():
