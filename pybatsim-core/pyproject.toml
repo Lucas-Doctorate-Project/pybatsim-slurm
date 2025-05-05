@@ -43,8 +43,8 @@ pybatsim = "pybatsim.cmdline:main"
 
 # definition of officially maintained external decision components (EDCs)
 [project.entry-points."pybatsim.external_decision_components"]
-random = "pybatsim.schedulers.random:RandomScheduler"
-prototype = "pybatsim.schedulers.prototype:PrototypeEDC"
+random = "pybatsim.external_decision_components.random:RandomScheduler"
+prototype = "pybatsim.external_decision_components.prototype:PrototypeEDC"
 
 [tool.poetry]
 classifiers = [
