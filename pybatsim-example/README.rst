@@ -13,7 +13,7 @@ A small scheduler is given as an example, which simply rejects all submitted job
 To use your own scheduler, put the source file in this current repository (along with `universal_rejection.py, then register it in the pybatsim entry point by adding a line in the `pyproject.toml` file under the `[tool.poetry.plugins."pybatsim.schedulers"]` section.
 The line must follow the pattern::
 
-  `<scheduler_name> = <file_name>:<Scheduler_class_name>`.
+  <scheduler_name> = <file_name>:<Scheduler_class_name>.
 
 Start your scheduler
 ~~~~~~~~~~~~~~~~~~~~
