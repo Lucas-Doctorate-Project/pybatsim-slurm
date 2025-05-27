@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class Job:
     def __init__(self, job_id, submission_time, resource_request,
                  walltime, profile_id,
@@ -22,11 +23,6 @@ class Job:
                    json_dict["job"]["profile_id"],
                    json_dict.get("profile"),
                    json_dict["job"].get("extra_data"))
-
-    #TODO: will disappear soon?
-    class AllocValidationStrategy(Enum):
-        MatchJobRequestExactly = 0
-        MatchJobRequestBigEnough = 1
 
     class ExecutorPlacement:
 

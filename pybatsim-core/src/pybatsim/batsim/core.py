@@ -63,20 +63,8 @@ class SimulationMetadata:
     # simulation features requested by the EDC
     requested_features: SimulationFeatures = SimulationFeatures.default()
 
-    # TODO: will disappear soon?
-    # scheduling constraints
-    compute_sharing: bool = False
-    storage_sharing: bool = True
-    job_allocation_validation_strategy: Job.AllocValidationStrategy = \
-            Job.AllocValidationStrategy.MatchJobRequestExactly
-
     def to_protocol_dict(self):
         return {
             "batprotocol_version": self.batprotocol_version,
             "requested_simulation_features": self.requested_features.to_protocol_dict(),
-            "scheduling_constraints": {
-                "compute_sharing": self.compute_sharing,
-                "storage_sharing": self.storage_sharing,
-                "job_allocation_validation_strategy": self.job_allocation_validation_strategy.name,
-            },
         }
