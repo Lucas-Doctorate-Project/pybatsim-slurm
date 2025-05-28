@@ -79,6 +79,7 @@ def check_schedule_regression(obtained_filename, expected_filename):
         'delay_profile_rejected_job.json',
     ),
 )
+@pytest.mark.regression
 def test_random(  # noqa: PLR0913
     start_batsim, shared_datadir, file_regression, tmp_path, platform, workload
 ):

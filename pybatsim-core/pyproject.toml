@@ -79,11 +79,15 @@ black = "^25.1.0"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "--verbose -r fxX --maxfail=25 --cov-report=html --cov=pybatsim"
+addopts = "--strict-markers --verbose -r fxX --maxfail=25 --cov-report=html --cov=pybatsim"
 required_plugins = [
   "pytest-cov",
   "pytest-datadir",
   "pytest-regressions",
+]
+markers = [
+  "unit",
+  "regression",
 ]
 testpaths = [
   "tests",

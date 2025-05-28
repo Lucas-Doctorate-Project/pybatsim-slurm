@@ -45,6 +45,7 @@ def scheduler_options_dir(tmp_path_factory):
     return wd
 
 
+@pytest.mark.unit
 class TestArgumentsParsing:
     PARSING_ERROR_RETURN_CODE = 2
 
