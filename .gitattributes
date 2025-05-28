@@ -6,3 +6,4 @@
 
 # GitLab configuration
 poetry.lock gitlab-generated
+flake.lock gitlab-generated
