@@ -9,7 +9,9 @@ from .events import (
     ExecuteJobEvent,
     JobCompletedEvent,
     JobSubmittedEvent,
+    JobsKilledEvent,
     RejectJobEvent,
+    KillJobsEvent,
     SimulationBeginsEvent,
     SimulationEndsEvent,
 )
@@ -27,9 +29,11 @@ __all__ = [
     'SimulationEndsEvent',
     'JobSubmittedEvent',
     'JobCompletedEvent',
+    'JobsKilledEvent',
     'AllStaticJobsHaveBeenSubmittedEvent',
     'EDCHelloEvent',
     'RejectJobEvent',
     'ExecuteJobEvent',
+    'KillJobsEvent',
     'Job',
 ]

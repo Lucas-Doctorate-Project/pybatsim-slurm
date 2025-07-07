@@ -11,6 +11,7 @@ from .events import (
     EDCHelloEvent,
     JobSubmittedEvent,
     RejectJobEvent,
+    KillJobsEvent,
     RxEvent,
     SimulationEndsEvent,
     TxEvent,
@@ -40,6 +41,7 @@ class Batsim:
 
         self._received_SimulationEnds: bool = False
         self._alive_jobs: dict[str, Job] = {}
+        self._kill_requested_jobs: dict[str, Job] = {}
 
     def __setup_zmq(self):
         context = zmq.Context()
@@ -190,6 +192,10 @@ class Batsim:
         if isinstance(event, RejectJobEvent):
             # remove from alive_jobs as this is the last possible event sent to Batsim
             self._alive_jobs.pop(event.job.job_id)
+        if isinstance(event, KillJobsEvent):
+            # keep separate references to Job objects
+            for job in event.jobs:
+                self._kill_requested_jobs[job.job_id] = job
 
         self._tx.append(event)
 
@@ -199,6 +205,12 @@ class Batsim:
             # remove from alive_jobs as this is the last possible event from Batsim
             job = self._alive_jobs.pop(protocol_dict['event']['job_id'])
             protocol_dict['__pybatsim_job'] = job
+        if protocol_dict['event_type'] == 'JobsKilledEvent':
+            jobs = []
+            for job_id in protocol_dict['event']['job_ids']:
+                job = self._kill_requested_jobs.pop(job_id)
+                jobs.append(job)
+            protocol_dict['__pybatsim_jobs'] = jobs
 
         event = RxEvent.from_protocol_dict(protocol_dict)
 

@@ -55,3 +55,6 @@ class Job:
                     "mapping": self.custom_mapping
                 }
             return json_dict
+
+    # class KillProgress
+    # TODO: implement me

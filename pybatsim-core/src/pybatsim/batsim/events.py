@@ -158,6 +158,30 @@ class JobCompletedEvent(RxEvent):
             return_code=payload['event']['return_code'],
         )
 
+class JobsKilledEvent(RxEvent):
+    jobs: [Job]
+
+    @override
+    def __init__(self, timestamp, jobs, progresses):
+        super().__init__(timestamp)
+        self.jobs = jobs
+        self.progresses = progresses
+
+    @override
+    @classmethod
+    def from_protocol_dict(cls, payload: dict) -> JobsKilledEvent:
+        progresses: dict[str, dict] = {}
+        for progress_dict in payload['event']['progresses']:
+            job_id = progress_dict['job_id']
+            # TODO: correctly deserialise the wrapped progress in a KillProgress object
+            progresses[job_id] = progress_dict['wrapper']
+
+        return cls(
+            timestamp=payload['timestamp'],
+            jobs=payload['__pybatsim_jobs'], # injected by deserialisation
+            progresses=progresses,
+        )
+
 
 class AllStaticJobsHaveBeenSubmittedEvent(RxEvent):
     @override
@@ -253,5 +277,24 @@ class ExecuteJobEvent(TxEvent):
         # TODO: enhance handling of optional storage_placement
         if self.storage_placement is not None:
             payload['storage_placement'] = self.storage_placement
+
+        return protocol_dict
+
+class KillJobsEvent(TxEvent):
+    jobs: [Job]
+
+    @override
+    def __init__(self, timestamp, jobs):
+        super().__init__(timestamp)
+        self.jobs = jobs
+
+    @override
+    def to_protocol_dict(self) -> dict:
+        protocol_dict = super().to_protocol_dict()
+        payload = protocol_dict['event']
+
+        payload |= {
+            'job_ids': [job.job_id for job in self.jobs]
+        }
 
         return protocol_dict
