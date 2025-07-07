@@ -6,6 +6,7 @@ from .events import (
     AllStaticJobsHaveBeenSubmittedEvent,
     EDCHelloEvent,
     Event,
+    TxEvent,
     ExecuteJobEvent,
     JobCompletedEvent,
     JobSubmittedEvent,
@@ -36,8 +37,9 @@ class Scheduler(ExternalDecisionComponent):
             self._dispatch(event)
 
     def _dispatch(self, event: Event) -> None:
-        # we should not receive send-only events:
-        # this could be done better with differentiated base classes
+        # We should not receive send-only events
+        assert not isinstance(event, TxEvent), f"Unexpected send-only Event '{type(event).__name__}'"
+
         match event:
             # receive-only events
             case JobSubmittedEvent():
@@ -50,11 +52,6 @@ class Scheduler(ExternalDecisionComponent):
                 self.handle_simulation_end(event)
             case AllStaticJobsHaveBeenSubmittedEvent():
                 self.handle_no_more_static_jobs(event)
-
-            # send-only events
-            case EDCHelloEvent() | RejectJobEvent() | ExecuteJobEvent():
-                err_msg = f"Unexpected send-only Event '{type(event).__name__}'"
-                raise TypeError(err_msg)
 
             # catch-all for unknown events
             case _:
