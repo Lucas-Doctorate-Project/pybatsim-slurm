@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, ClassVar, Final, override
+from enum import Enum
 
 from .core import SimulationMetadata
 from .job import Job
@@ -182,6 +183,25 @@ class JobsKilledEvent(RxEvent):
             progresses=progresses,
         )
 
+class RequestedCallEvent(RxEvent):
+    call_me_later_id: str
+    last_periodic_call: bool
+
+    @override
+    def __init__(self, timestamp, call_id, last_call):
+        super().__init__(timestamp)
+        self.call_me_later_id = call_id
+        self.last_periodic_call = last_call
+
+    @override
+    @classmethod
+    def from_protocol_dict(cls, payload: dict) -> RequestedCallEvent:
+        return cls(
+            timestamp=payload['timestamp'],
+            call_id=payload['event']['call_me_later_id'],
+            last_call=payload['event']['last_periodic_call'],
+        )
+
 
 class AllStaticJobsHaveBeenSubmittedEvent(RxEvent):
     @override
@@ -295,6 +315,56 @@ class KillJobsEvent(TxEvent):
 
         payload |= {
             'job_ids': [job.job_id for job in self.jobs]
+        }
+
+        return protocol_dict
+
+
+class CallMeLaterEvent(TxEvent):
+
+    class TemporalTriggerType(Enum):
+        OneShot = 0
+        Periodic = 1
+
+    call_me_later_id: str
+    when_type: TemporalTriggerType
+    when: dict
+
+    @override
+    def __init__(self, timestamp, call_id, when_type, when_dict):
+        super().__init__(timestamp)
+        self.call_me_later_id = call_id
+        self.when_type = when_type
+        self.when = when_dict
+
+    @override
+    def to_protocol_dict(self) -> dict:
+        protocol_dict = super().to_protocol_dict()
+        payload = protocol_dict['event']
+
+        payload |= {
+            'call_me_later_id': self.call_me_later_id,
+            'when_type': self.when_type.name,
+            'when': self.when, # TODO: make it an object? (but REALLY VERBOSE)
+        }
+
+        return protocol_dict
+
+class StopCallMeLaterEvent(TxEvent):
+    call_me_later_id: str
+
+    @override
+    def __init__(self, timestamp, call_id):
+        super().__init__(timestamp)
+        self.call_me_later_id = call_id
+
+    @override
+    def to_protocol_dict(self) -> dict:
+        protocol_dict = super().to_protocol_dict()
+        payload = protocol_dict['event']
+
+        payload |= {
+            'call_me_later_id': self.call_me_later_id,
         }
 
         return protocol_dict

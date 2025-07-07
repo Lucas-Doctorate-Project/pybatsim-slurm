@@ -12,6 +12,7 @@ from .events import (
     JobSubmittedEvent,
     RejectJobEvent,
     JobsKilledEvent,
+    RequestedCallEvent,
     SimulationBeginsEvent,
     SimulationEndsEvent,
 )
@@ -49,6 +50,8 @@ class Scheduler(ExternalDecisionComponent):
                 self.handle_completed_job(event)
             case JobsKilledEvent():
                 self.handle_jobs_killed(event)
+            case RequestedCallEvent():
+                self.handle_requested_call(event)
             case SimulationBeginsEvent():
                 self.handle_simulation_begin(event)
             case SimulationEndsEvent():
@@ -75,6 +78,9 @@ class Scheduler(ExternalDecisionComponent):
 
     @abstractmethod
     def handle_jobs_killed(self, event: JobsKilledEvent) -> None: ...
+
+    @abstractmethod
+    def handle_requested_call(self, event: RequestedCallEvent) -> None: ...
 
     def handle_no_more_static_jobs(self, event: AllStaticJobsHaveBeenSubmittedEvent):
         pass

@@ -12,6 +12,9 @@ from .events import (
     JobsKilledEvent,
     RejectJobEvent,
     KillJobsEvent,
+    CallMeLaterEvent,
+    StopCallMeLaterEvent,
+    RequestedCallEvent,
     SimulationBeginsEvent,
     SimulationEndsEvent,
 )
@@ -35,5 +38,8 @@ __all__ = [
     'RejectJobEvent',
     'ExecuteJobEvent',
     'KillJobsEvent',
+    'CallMeLaterEvent',
+    'StopCallMeLaterEvent',
+    'RequestedCallEvent',
     'Job',
 ]
