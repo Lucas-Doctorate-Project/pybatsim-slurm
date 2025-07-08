@@ -203,6 +203,30 @@ class RequestedCallEvent(RxEvent):
         )
 
 
+class ExternalEventOccurredEvent(RxEvent):
+    external_event_id: str
+    # TODO: make the event type an Enum? But for the moment only one type "GenericExternalEvent"
+    external_event_type: str
+    external_event: dict
+
+    @override
+    def __init__(self, timestamp, external_event_id, external_event_type, external_event):
+        super().__init__(timestamp)
+        self.external_event_id = external_event_id
+        self.external_event_type = external_event_type
+        self.external_event = external_event
+
+    @override
+    @classmethod
+    def from_protocol_dict(cls, payload: dict) -> RequestedCallEvent:
+        return cls(
+            timestamp=payload['timestamp'],
+            external_event_id=payload['event']['id'],
+            external_event_type=payload['event']['external_event_type'],
+            external_event=payload['event']['external_event'],
+        )
+
+
 class AllStaticJobsHaveBeenSubmittedEvent(RxEvent):
     @override
     @classmethod
@@ -210,6 +234,16 @@ class AllStaticJobsHaveBeenSubmittedEvent(RxEvent):
         return cls(
             timestamp=payload['timestamp'],
         )
+
+class AllStaticExternalEventsHaveBeenInjectedEvent(RxEvent):
+    @override
+    @classmethod
+    def from_protocol_dict(cls, payload: dict) -> AllStaticExternalEventsHaveBeenInjectedEvent:
+        return cls(
+            timestamp=payload['timestamp'],
+        )
+
+ExternalEventOccurredEvent
 
 class SimulationErrorEvent(RxEvent):
     error: str

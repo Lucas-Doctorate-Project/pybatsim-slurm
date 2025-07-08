@@ -4,6 +4,7 @@ from typing import Protocol
 from .batsim import Batsim
 from .events import (
     AllStaticJobsHaveBeenSubmittedEvent,
+    AllStaticExternalEventsHaveBeenInjectedEvent,
     EDCHelloEvent,
     Event,
     TxEvent,
@@ -13,6 +14,7 @@ from .events import (
     RejectJobEvent,
     JobsKilledEvent,
     RequestedCallEvent,
+    ExternalEventOccurredEvent,
     SimulationBeginsEvent,
     SimulationEndsEvent,
 )
@@ -52,12 +54,16 @@ class Scheduler(ExternalDecisionComponent):
                 self.handle_jobs_killed(event)
             case RequestedCallEvent():
                 self.handle_requested_call(event)
+            case ExternalEventOccurredEvent():
+                self.handle_external_event_occurred(event)
             case SimulationBeginsEvent():
                 self.handle_simulation_begin(event)
             case SimulationEndsEvent():
                 self.handle_simulation_end(event)
             case AllStaticJobsHaveBeenSubmittedEvent():
                 self.handle_no_more_static_jobs(event)
+            case AllStaticExternalEventsHaveBeenInjectedEvent():
+                self.handle_no_more_external_events(event)
 
             # catch-all for unknown events
             case _:
@@ -80,9 +86,15 @@ class Scheduler(ExternalDecisionComponent):
     def handle_jobs_killed(self, event: JobsKilledEvent) -> None: ...
 
     @abstractmethod
+    def handle_external_event_occurred(self, event: ExternalEventOccurredEvent) -> None: ...
+
+    @abstractmethod
     def handle_requested_call(self, event: RequestedCallEvent) -> None: ...
 
     def handle_no_more_static_jobs(self, event: AllStaticJobsHaveBeenSubmittedEvent):
+        pass
+
+    def handle_no_more_external_events(self, event: AllStaticExternalEventsHaveBeenInjectedEvent):
         pass
 
     def finalize(self):

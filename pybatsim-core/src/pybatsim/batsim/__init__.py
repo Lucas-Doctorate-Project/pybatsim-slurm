@@ -3,6 +3,7 @@ from .core import SimulationFeatures, SimulationMetadata
 from .edc import ExternalDecisionComponent, Scheduler
 from .events import (
     AllStaticJobsHaveBeenSubmittedEvent,
+    AllStaticExternalEventsHaveBeenInjectedEvent,
     EDCHelloEvent,
     Event,
     TxEvent,
@@ -15,6 +16,7 @@ from .events import (
     CallMeLaterEvent,
     StopCallMeLaterEvent,
     RequestedCallEvent,
+    ExternalEventOccurredEvent,
     SimulationBeginsEvent,
     SimulationEndsEvent,
     SimulationErrorEvent,
@@ -38,6 +40,7 @@ __all__ = [
     'JobCompletedEvent',
     'JobsKilledEvent',
     'AllStaticJobsHaveBeenSubmittedEvent',
+    'AllStaticExternalEventsHaveBeenInjectedEvent',
     'EDCHelloEvent',
     'RejectJobEvent',
     'ExecuteJobEvent',
@@ -45,5 +48,6 @@ __all__ = [
     'CallMeLaterEvent',
     'StopCallMeLaterEvent',
     'RequestedCallEvent',
+    'ExternalEventOccurredEvent',
     'Job',
 ]
