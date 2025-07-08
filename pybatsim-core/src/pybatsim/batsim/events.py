@@ -282,6 +282,26 @@ class HostsPStateChangedEvent(RxEvent):
             pstate=payload['event']['pstate'],
         )
 
+
+class HostsTurnedOnOffEvent(RxEvent):
+    host_ids: ProcSet
+    state: int
+
+    @override
+    def __init__(self, timestamp, host_ids, state):
+        super().__init__(timestamp)
+        self.host_ids = host_ids
+        self.state = state
+
+    @override
+    @classmethod
+    def from_protocol_dict(cls, payload: dict) -> HostsTurnedOnOffEvent:
+        return cls(
+            timestamp=payload['timestamp'],
+            host_ids=ProcSet.from_str(payload['event']['host_ids']),
+            state=payload['event']['state'],
+        )
+
 class EDCHelloEvent(TxEvent):
     simulation_metadata: SimulationMetadata
     # TODO: consider integrating edc_* in simulation_metadata
@@ -462,6 +482,28 @@ class ChangeHostsPStateEvent(TxEvent):
         payload |= {
             'host_ids': str(self.host_ids),
             'pstate': self.pstate
+        }
+
+        return protocol_dict
+
+class TurnOnOffHostsEvent(TxEvent):
+    host_ids: ProcSet
+    state: int
+
+    @override
+    def __init__(self, timestamp, host_ids, state):
+        super().__init__(timestamp)
+        self.host_ids = host_ids
+        self.state = state
+
+    @override
+    def to_protocol_dict(self) -> dict:
+        protocol_dict = super().to_protocol_dict()
+        payload = protocol_dict['event']
+
+        payload |= {
+            'host_ids': str(self.host_ids),
+            'state': self.state
         }
 
         return protocol_dict

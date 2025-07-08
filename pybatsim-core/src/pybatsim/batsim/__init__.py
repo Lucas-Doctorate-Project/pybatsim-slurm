@@ -19,6 +19,8 @@ from .events import (
     ExternalEventOccurredEvent,
     ChangeHostsPStateEvent,
     HostsPStateChangedEvent,
+    TurnOnOffHostsEvent,
+    HostsTurnedOnOffEvent,
     SimulationBeginsEvent,
     SimulationEndsEvent,
     SimulationErrorEvent,
@@ -53,5 +55,7 @@ __all__ = [
     'ExternalEventOccurredEvent',
     'ChangeHostsPStateEvent',
     'HostsPStateChangedEvent',
+    'TurnOnOffHostsEvent',
+    'HostsTurnedOnOffEvent',
     'Job',
 ]
