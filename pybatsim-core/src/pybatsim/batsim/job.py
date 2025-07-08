@@ -56,5 +56,10 @@ class Job:
                 }
             return json_dict
 
+
+    # class PlacementPolicy
+    # TODO: implement me
+    # A merge of executor_placement, profile_allocation_override, storage_placement
+
     # class KillProgress
     # TODO: implement me

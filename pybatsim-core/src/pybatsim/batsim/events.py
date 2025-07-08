@@ -14,34 +14,36 @@ List of batprotocol events:
       OK JobCompletedEvent
       OK RejectJobEvent
       OK ExecuteJobEvent
-    TODO KillJobsEvent
-    TODO JobsKilledEvent
+      Ok KillJobsEvent
+      OK JobsKilledEvent
 
     TODO RegisterProfileEvent
     TODO RegisterJobEvent
+    TODO FinishRegistrationEvent
 
     TODO CreateProbeEvent
     TODO StopProbeEvent
     TODO TriggerProbeEvent
     TODO ResetProbeEvent
     TODO ProbeDataEmittedEvent
-    TODO CallMeLaterEvent
-    TODO RequestedCallEvent
-    TODO StopCallMeLaterEvent
+      OK CallMeLaterEvent
+      OK RequestedCallEvent
+      OK StopCallMeLaterEvent
 
-    TODO BatsimHelloEvent
       OK EDCHelloEvent
       OK SimulationBeginsEvent
       OK SimulationEndsEvent
 
-      ?? AllStaticJobsHaveBeenSubmittedEvent
-    TODO AllStaticExternalEventsHaveBeenInjectedEvent
-    TODO FinishRegistrationEvent
-    TODO ForceSimulationStopEvent
+      OK AllStaticJobsHaveBeenSubmittedEvent
+      OK AllStaticExternalEventsHaveBeenInjectedEvent
+      OK ForceSimulationStopEvent
+      OK SimulationErrorEvent
+      OK ExternalEventOccurredEvent
 
-    TODO ChangeHostPStateEvent
-    TODO HostPStateChangedEvent
-    TODO ExternalEventOccurredEvent
+      OK ChangeHostPStateEvent
+      OK HostPStateChangedEvent
+      OK TurnOnOffHostsEvent
+      OK HostsTurnedOnOffEvent
 '''
 
 
@@ -93,21 +95,29 @@ class TxEvent(Event):
 
 # concrete classes  ------------------------------------------------------------
 
+######################
+######################
+## RxEvent classes  ------------------------------------------------------------
+######################
+######################
 
 class SimulationBeginsEvent(RxEvent):
+    whole_dict: dict
     computation_host_number: int
+    # TODO: Handle me correctly. Put all information in separate attributes?
 
     @override
-    def __init__(self, timestamp, computation_host_number):
+    def __init__(self, timestamp, whole_dict):
         super().__init__(timestamp)
-        self.computation_host_number = computation_host_number
+        self.whole_dict = whole_dict
+        self.computation_host_number = whole_dict['computation_host_number']
 
     @override
     @classmethod
     def from_protocol_dict(cls, payload: dict) -> SimulationBeginsEvent:
         return cls(
             timestamp=payload['timestamp'],
-            computation_host_number=payload['event']['computation_host_number'],
+            whole_dict=payload['event'],
         )
 
 
@@ -244,8 +254,6 @@ class AllStaticExternalEventsHaveBeenInjectedEvent(RxEvent):
             timestamp=payload['timestamp'],
         )
 
-ExternalEventOccurredEvent
-
 class SimulationErrorEvent(RxEvent):
     error: str
 
@@ -301,6 +309,14 @@ class HostsTurnedOnOffEvent(RxEvent):
             host_ids=ProcSet.from_str(payload['event']['host_ids']),
             state=payload['event']['state'],
         )
+
+
+######################
+######################
+## TxEvent classes  ------------------------------------------------------------
+######################
+######################
+
 
 class EDCHelloEvent(TxEvent):
     simulation_metadata: SimulationMetadata

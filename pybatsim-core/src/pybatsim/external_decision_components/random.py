@@ -43,11 +43,11 @@ class RandomScheduler(Scheduler):
         super().handle_msg(msg)
         self.schedule_jobs()
 
-    def handle_simulation_begin(self, event: SimulationBeginsEvent) -> None:
+    def handle_simulation_begins(self, event: SimulationBeginsEvent) -> None:
         self.cluster_size = event.computation_host_number
         self.idle_resources = ProcSet((0, self.cluster_size - 1))
 
-    def handle_simulation_end(self, event: SimulationEndsEvent) -> None:
+    def handle_simulation_ends(self, event: SimulationEndsEvent) -> None:
         pass
 
     def handle_submitted_job(self, event: JobSubmittedEvent) -> None:

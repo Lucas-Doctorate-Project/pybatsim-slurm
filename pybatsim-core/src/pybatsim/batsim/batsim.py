@@ -34,7 +34,7 @@ class Batsim:
 
         self._edc = None
 
-        self._time = 0
+        self._time: float = 0.0
         self._simulation_metadata: SimulationMetadata = SimulationMetadata()
         self._rx: deque[RxEvent] = deque()
         self._tx: deque[TxEvent] = deque()
@@ -82,6 +82,9 @@ class Batsim:
     @property
     def time(self):
         return self._time
+
+    def consume_time(self, time_consumed):
+        self._time += time_consumed
 
     @property
     def simulation_metadata(self):

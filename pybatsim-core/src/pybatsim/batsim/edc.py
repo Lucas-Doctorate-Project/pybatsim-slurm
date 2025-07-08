@@ -63,9 +63,9 @@ class Scheduler(ExternalDecisionComponent):
             case HostsTurnedOnOffEvent():
                 self.handle_hosts_turned_onoff(event)
             case SimulationBeginsEvent():
-                self.handle_simulation_begin(event)
+                self.handle_simulation_begins(event)
             case SimulationEndsEvent():
-                self.handle_simulation_end(event)
+                self.handle_simulation_ends(event)
             case AllStaticJobsHaveBeenSubmittedEvent():
                 self.handle_no_more_static_jobs(event)
             case AllStaticExternalEventsHaveBeenInjectedEvent():
@@ -77,10 +77,10 @@ class Scheduler(ExternalDecisionComponent):
                 raise TypeError(err_msg)
 
     @abstractmethod
-    def handle_simulation_begin(self, event: SimulationBeginsEvent) -> None: ...
+    def handle_simulation_begins(self, event: SimulationBeginsEvent) -> None: ...
 
     @abstractmethod
-    def handle_simulation_end(self, event: SimulationEndsEvent) -> None: ...
+    def handle_simulation_ends(self, event: SimulationEndsEvent) -> None: ...
 
     @abstractmethod
     def handle_submitted_job(self, event: JobSubmittedEvent) -> None: ...
