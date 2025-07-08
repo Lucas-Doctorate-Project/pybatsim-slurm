@@ -17,6 +17,8 @@ from .events import (
     RequestedCallEvent,
     SimulationBeginsEvent,
     SimulationEndsEvent,
+    SimulationErrorEvent,
+    ForceSimulationStopEvent,
 )
 from .job import Job
 
@@ -30,6 +32,8 @@ __all__ = [
     'TxEvent',
     'SimulationBeginsEvent',
     'SimulationEndsEvent',
+    'SimulationErrorEvent',
+    'ForceSimulationStopEvent',
     'JobSubmittedEvent',
     'JobCompletedEvent',
     'JobsKilledEvent',

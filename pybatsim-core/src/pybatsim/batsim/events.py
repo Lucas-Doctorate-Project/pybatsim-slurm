@@ -211,6 +211,22 @@ class AllStaticJobsHaveBeenSubmittedEvent(RxEvent):
             timestamp=payload['timestamp'],
         )
 
+class SimulationErrorEvent(RxEvent):
+    error: str
+
+    @override
+    def __init__(self, timestamp, error):
+        super().__init__(timestamp)
+        self.error = error
+
+    @override
+    @classmethod
+    def from_protocol_dict(cls, payload: dict) -> SimulationErrorEvent:
+        return cls(
+            timestamp=payload['timestamp'],
+            error=payload['event']['error'],
+        )
+
 
 class EDCHelloEvent(TxEvent):
     simulation_metadata: SimulationMetadata
@@ -368,3 +384,7 @@ class StopCallMeLaterEvent(TxEvent):
         }
 
         return protocol_dict
+
+class ForceSimulationStopEvent(TxEvent):
+    pass
+    # Nothing specific for this event, its payload is empty

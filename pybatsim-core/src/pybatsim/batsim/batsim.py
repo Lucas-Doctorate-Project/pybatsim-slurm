@@ -220,6 +220,8 @@ class Batsim:
             # TODO: handle case where job is a dynamic job and Batsim is asked
             # to acknowledge dynamic jobs
             self._alive_jobs[event.job.job_id] = event.job
+        #elif isinstance(event, SimulationErrorEvent):
+        #   # TODO: Handle me and correctly terminate the EDC
 
         return event
 
