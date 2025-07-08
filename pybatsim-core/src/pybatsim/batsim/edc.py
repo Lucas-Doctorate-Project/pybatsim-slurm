@@ -15,6 +15,7 @@ from .events import (
     JobsKilledEvent,
     RequestedCallEvent,
     ExternalEventOccurredEvent,
+    HostsPStateChangedEvent,
     SimulationBeginsEvent,
     SimulationEndsEvent,
 )
@@ -56,6 +57,8 @@ class Scheduler(ExternalDecisionComponent):
                 self.handle_requested_call(event)
             case ExternalEventOccurredEvent():
                 self.handle_external_event_occurred(event)
+            case HostsPStateChangedEvent():
+                self.handle_hosts_pstate_changed(event)
             case SimulationBeginsEvent():
                 self.handle_simulation_begin(event)
             case SimulationEndsEvent():
@@ -87,6 +90,9 @@ class Scheduler(ExternalDecisionComponent):
 
     @abstractmethod
     def handle_external_event_occurred(self, event: ExternalEventOccurredEvent) -> None: ...
+
+    @abstractmethod
+    def handle_hosts_pstate_changed(self, event: HostsPStateChangedEvent) -> None: ...
 
     @abstractmethod
     def handle_requested_call(self, event: RequestedCallEvent) -> None: ...

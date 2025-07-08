@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar, Final, override
 from enum import Enum
+from procset import ProcSet
 
 from .core import SimulationMetadata
 from .job import Job
@@ -262,6 +263,25 @@ class SimulationErrorEvent(RxEvent):
         )
 
 
+class HostsPStateChangedEvent(RxEvent):
+    host_ids: ProcSet
+    pstate: int
+
+    @override
+    def __init__(self, timestamp, host_ids, pstate):
+        super().__init__(timestamp)
+        self.host_ids = host_ids
+        self.pstate = pstate
+
+    @override
+    @classmethod
+    def from_protocol_dict(cls, payload: dict) -> HostsPStateChangedEvent:
+        return cls(
+            timestamp=payload['timestamp'],
+            host_ids=ProcSet.from_str(payload['event']['host_ids']),
+            pstate=payload['event']['pstate'],
+        )
+
 class EDCHelloEvent(TxEvent):
     simulation_metadata: SimulationMetadata
     # TODO: consider integrating edc_* in simulation_metadata
@@ -422,3 +442,26 @@ class StopCallMeLaterEvent(TxEvent):
 class ForceSimulationStopEvent(TxEvent):
     pass
     # Nothing specific for this event, its payload is empty
+
+
+class ChangeHostsPStateEvent(TxEvent):
+    host_ids: ProcSet
+    pstate: int
+
+    @override
+    def __init__(self, timestamp, host_ids, pstate):
+        super().__init__(timestamp)
+        self.host_ids = host_ids
+        self.pstate = pstate
+
+    @override
+    def to_protocol_dict(self) -> dict:
+        protocol_dict = super().to_protocol_dict()
+        payload = protocol_dict['event']
+
+        payload |= {
+            'host_ids': str(self.host_ids),
+            'pstate': self.pstate
+        }
+
+        return protocol_dict
