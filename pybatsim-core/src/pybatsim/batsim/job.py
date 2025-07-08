@@ -2,14 +2,14 @@ from enum import Enum
 
 
 class Job:
-    def __init__(self, job_id, submission_time, resource_request,
-                 walltime, profile_id,
+    def __init__(self, job_id, resource_request,
+                 walltime, profile_id, submission_time = None,
                  profile_dict = None, extra_data = None):
         self.job_id = job_id
-        self.submission_time = submission_time
         self.resource_request = resource_request
         self.walltime = walltime
         self.profile_id = profile_id
+        self.submission_time = submission_time
         self.profile_dict = profile_dict
         self.extra_data = extra_data
 
@@ -17,10 +17,10 @@ class Job:
     @classmethod
     def from_protocol_dict(cls, json_dict):
         return cls(json_dict["job_id"],
-                   json_dict["submission_time"],
                    json_dict["job"]["resource_request"],
                    json_dict["job"]["walltime"],
                    json_dict["job"]["profile_id"],
+                   json_dict["submission_time"],
                    json_dict.get("profile"),
                    json_dict["job"].get("extra_data"))
 

@@ -479,6 +479,60 @@ class ForceSimulationStopEvent(TxEvent):
     pass
     # Nothing specific for this event, its payload is empty
 
+class FinishRegistrationEvent(TxEvent):
+    pass
+    # Nothing specific for this event, its payload is empty
+
+class RegisterJobEvent(TxEvent):
+    job: Job
+
+    @override
+    def __init__(self, timestamp, job):
+        super().__init__(timestamp)
+        self.job = job
+
+    @override
+    def to_protocol_dict(self) -> dict:
+        protocol_dict = super().to_protocol_dict()
+        payload = protocol_dict['event']
+
+        payload |= {
+            'job_id': self.job.job_id,
+            'job': {
+                'resource_request': self.job.resource_request,
+                'walltime': self.job.walltime,
+                'profile_id': self.job.profile_id
+            }
+        }
+
+        if self.job.extra_data is not None:
+            payload['job']['extra_data'] = self.job.extra_data
+
+        return protocol_dict
+
+class RegisterProfileEvent(TxEvent):
+    profile: Profile
+
+    @override
+    def __init__(self, timestamp, profile):
+        super().__init__(timestamp)
+        self.profile = profile
+
+    @override
+    def to_protocol_dict(self) -> dict:
+        protocol_dict = super().to_protocol_dict()
+        payload = protocol_dict['event']
+
+        payload |= { 'profile': {
+            'id': self.profile.profile_id,
+            'profile_type': self.profile.profile_type.name,
+            'profile': self.profile.profile_dict,
+        }}
+
+        if self.profile.extra_data is not None:
+            payload['profile']['extra_data'] = self.profile.extra_data
+
+        return protocol_dict
 
 class ChangeHostsPStateEvent(TxEvent):
     host_ids: ProcSet

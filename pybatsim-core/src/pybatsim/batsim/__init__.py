@@ -21,12 +21,16 @@ from .events import (
     HostsPStateChangedEvent,
     TurnOnOffHostsEvent,
     HostsTurnedOnOffEvent,
+    RegisterJobEvent,
+    RegisterProfileEvent,
+    FinishRegistrationEvent,
     SimulationBeginsEvent,
     SimulationEndsEvent,
     SimulationErrorEvent,
     ForceSimulationStopEvent,
 )
 from .job import Job
+from .profile import Profile
 
 __all__ = [
     'Batsim',
@@ -57,5 +61,9 @@ __all__ = [
     'HostsPStateChangedEvent',
     'TurnOnOffHostsEvent',
     'HostsTurnedOnOffEvent',
+    'RegisterJobEvent',
+    'RegisterProfileEvent',
+    'FinishRegistrationEvent',
     'Job',
+    'Profile',
 ]
