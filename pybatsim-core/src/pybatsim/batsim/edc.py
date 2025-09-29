@@ -88,20 +88,20 @@ class Scheduler(ExternalDecisionComponent):
     @abstractmethod
     def handle_completed_job(self, event: JobCompletedEvent) -> None: ...
 
-    @abstractmethod
-    def handle_jobs_killed(self, event: JobsKilledEvent) -> None: ...
+    def handle_jobs_killed(self, event: JobsKilledEvent) -> None:
+        pass
 
-    @abstractmethod
-    def handle_external_event_occurred(self, event: ExternalEventOccurredEvent) -> None: ...
+    def handle_external_event_occurred(self, event: ExternalEventOccurredEvent) -> None:
+        pass
 
-    @abstractmethod
-    def handle_hosts_pstate_changed(self, event: HostsPStateChangedEvent) -> None: ...
+    def handle_hosts_pstate_changed(self, event: HostsPStateChangedEvent) -> None:
+        pass
 
-    @abstractmethod
-    def handle_hosts_turned_onoff(self, event: HostsTurnedOnOffEvent) -> None: ...
+    def handle_hosts_turned_onoff(self, event: HostsTurnedOnOffEvent) -> None:
+        pass
 
-    @abstractmethod
-    def handle_requested_call(self, event: RequestedCallEvent) -> None: ...
+    def handle_requested_call(self, event: RequestedCallEvent) -> None:
+        pass
 
     def handle_no_more_static_jobs(self, event: AllStaticJobsHaveBeenSubmittedEvent):
         pass
