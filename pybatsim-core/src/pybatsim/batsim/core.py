@@ -46,7 +46,6 @@ class SimulationFeatures(Flag, boundary=FlagBoundary.STRICT):
             'forward_profiles_on_job_submission': SimulationFeatures.FORWARD_PROFILES_ON_JOB_SUBMISSION in self,
             'forward_profiles_on_jobs_killed': SimulationFeatures.FORWARD_PROFILES_ON_JOBS_KILLED in self,
             'forward_profiles_on_simulation_begins': SimulationFeatures.FORWARD_PROFILES_ON_SIMULATION_BEGINS in self,
-            'forward_unknown_external_events': SimulationFeatures.FORWARD_UNKNOWN_EXTERNAL_EVENTS in self,
         }
 
 
