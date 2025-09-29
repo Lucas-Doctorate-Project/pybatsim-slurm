@@ -55,7 +55,7 @@ class SimulationMetadata:
     edc_init_str: str | None = None
 
     # Batsim and batprotocol information
-    batprotocol_version: str = "undefined"
+    batprotocol_version: str = "1.0.0"
     batsim_version: str | None = None
     batsim_commit: str | None = None
 
