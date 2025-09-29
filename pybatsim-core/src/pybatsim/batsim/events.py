@@ -6,6 +6,7 @@ from procset import ProcSet
 
 from .core import SimulationMetadata
 from .job import Job
+from .profile import Profile
 
 '''
 List of batprotocol events:
@@ -171,7 +172,7 @@ class JobCompletedEvent(RxEvent):
         )
 
 class JobsKilledEvent(RxEvent):
-    jobs: [Job]
+    jobs: list[Job]
 
     @override
     def __init__(self, timestamp, jobs, progresses):
@@ -229,7 +230,7 @@ class ExternalEventOccurredEvent(RxEvent):
 
     @override
     @classmethod
-    def from_protocol_dict(cls, payload: dict) -> RequestedCallEvent:
+    def from_protocol_dict(cls, payload: dict) -> ExternalEventOccurredEvent:
         return cls(
             timestamp=payload['timestamp'],
             external_event_id=payload['event']['id'],
@@ -407,7 +408,7 @@ class ExecuteJobEvent(TxEvent):
         return protocol_dict
 
 class KillJobsEvent(TxEvent):
-    jobs: [Job]
+    jobs: list[Job]
 
     @override
     def __init__(self, timestamp, jobs):
