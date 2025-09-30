@@ -2,22 +2,18 @@ from enum import Enum
 
 
 class Job:
-    # TODO(rb): add allocation attribute
-
     def __init__(self, job_id, resource_request,
-                 walltime, profile_id, submission_time = None,
-                 profile_dict = None, extra_data = None):
-        # TODO(rb):
-        #   - remove submission_time from ctor,
-        #   - add as optional attribute
-        #   - document Batsim only should modify it
-        self.job_id = job_id
-        self.resource_request = resource_request
-        self.walltime = walltime
-        self.profile_id = profile_id
-        self.submission_time = submission_time
-        self.profile_dict = profile_dict
-        self.extra_data = extra_data
+                 walltime, profile_id, extra_data = None):
+        self.job_id: str = job_id
+        self.resource_request: int = resource_request
+        self.walltime: float  = walltime
+        self.profile_id: str = profile_id
+        self.extra_data: dict | None = extra_data
+
+        # submission_time and profile_dict are None by default
+        # Only batsim should set their value (retrieved from batprotocol JobSubmittedEvent)
+        self.submission_time: float | None = None
+        self.profile_dict: dict | None = None
 
         # Value set by the EDC (for ExecuteJobEvent)
         self.allocation: ProcSet | None = None
@@ -25,14 +21,14 @@ class Job:
 
     @classmethod
     def from_protocol_dict(cls, json_dict):
-        # TODO(rb): inject submission_time after creation
-        return cls(json_dict["job_id"],
-                   json_dict["job"]["resource_request"],
-                   json_dict["job"]["walltime"],
-                   json_dict["job"]["profile_id"],
-                   json_dict["submission_time"],
-                   json_dict.get("profile"),
-                   json_dict["job"].get("extra_data"))
+        job = cls(json_dict["job_id"],
+                  json_dict["job"]["resource_request"],
+                  json_dict["job"]["walltime"],
+                  json_dict["job"]["profile_id"],
+                  json_dict["job"].get("extra_data"))
+        job.submission_time = json_dict["submission_time"]
+        job.profile_dict = json_dict.get("profile")
+        return job
 
     class ExecutorPlacement:
 
