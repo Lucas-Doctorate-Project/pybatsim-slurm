@@ -2,9 +2,15 @@ from enum import Enum
 
 
 class Job:
+    # TODO(rb): add allocation attribute
+
     def __init__(self, job_id, resource_request,
                  walltime, profile_id, submission_time = None,
                  profile_dict = None, extra_data = None):
+        # TODO(rb):
+        #   - remove submission_time from ctor,
+        #   - add as optional attribute
+        #   - document Batsim only should modify it
         self.job_id = job_id
         self.resource_request = resource_request
         self.walltime = walltime
@@ -13,9 +19,13 @@ class Job:
         self.profile_dict = profile_dict
         self.extra_data = extra_data
 
+        # Value set by the EDC (for ExecuteJobEvent)
+        self.allocation: ProcSet | None = None
+
 
     @classmethod
     def from_protocol_dict(cls, json_dict):
+        # TODO(rb): inject submission_time after creation
         return cls(json_dict["job_id"],
                    json_dict["job"]["resource_request"],
                    json_dict["job"]["walltime"],

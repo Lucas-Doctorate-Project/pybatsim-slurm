@@ -31,9 +31,6 @@ class SimulationFeatures(Flag, boundary=FlagBoundary.STRICT):
     FORWARD_PROFILES_ON_SIMULATION_BEGINS = auto()
     """Include profile information in SimulationBeginsEvent."""
 
-    FORWARD_UNKNOWN_EXTERNAL_EVENTS = auto()
-    """Ask Batsim to forward unkown events."""
-
     @classmethod
     def default(cls) -> SimulationFeatures:
         return cls(0)
