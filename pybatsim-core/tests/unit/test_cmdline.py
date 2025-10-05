@@ -6,7 +6,7 @@ import pytest
 from pybatsim import cmdline
 
 
-def dict_parametrize(argnames, paramsdict, indirect=False, scope=None):
+def dict_parametrize(argnames, paramsdict, indirect=False, scope=None):  # noqa: FBT002 (reason: prototype defined by pytest)
     """Decorator to parametrize test functions from a (id, argvalue) dict."""
     # zip ensures id matches its argvalue
     ids, argvalues = zip(*paramsdict.items(), strict=True)
@@ -152,7 +152,7 @@ class TestArgumentsParsing:
         assert excinfo.value.code == self.PARSING_ERROR_RETURN_CODE
         stderr = capsys.readouterr().err
         assert (
-            ": error: argument -o/--edc-options: unable to read 'non-existant.json': no such file or directory"
+            ": error: argument -o/--edc-options: unable to read 'non-existant.json': no such file or directory"  # noqa: E501 (reason: grepability)
             in stderr
         )
 

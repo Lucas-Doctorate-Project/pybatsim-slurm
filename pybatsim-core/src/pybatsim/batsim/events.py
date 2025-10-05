@@ -36,7 +36,7 @@ def __experimental(*, reason: str | None = None):
     def decorator(obj):
         # Craft experimental note.
         entity_type = 'class' if isinstance(obj, type) else 'function'
-        note = f'This {entity_type} is experimental and is subject to backward-incompatible changes upon minor releases.'  # noqa: E501
+        note = f'This {entity_type} is experimental and is subject to backward-incompatible changes upon minor releases.'  # noqa: E501 (reason: grepability)
         if reason:
             note += f'\nReason: {reason}'
 

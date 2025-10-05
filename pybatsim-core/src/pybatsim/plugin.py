@@ -27,7 +27,7 @@ EDC_ENTRY_POINT = 'pybatsim.external_decision_components'
 
 
 def find_plugin_edcs():
-    """Yield the tuples (name, class) of registered External Decision Component (EDC)."""
+    """Yield the tuples (name, class) for known External Decision Component (EDC)."""
     for edc in entry_points(group=EDC_ENTRY_POINT):
         yield edc.name, edc.load()
 
@@ -42,7 +42,7 @@ def find_ambiguous_edc_names():
     known_edc_names = collections.defaultdict(set)
     for edc in entry_points(group=EDC_ENTRY_POINT):
         known_edc_names[edc.name].add(edc.value)
-    ambiguous_edc_names = {
+
+    return {
         name: values for (name, values) in known_edc_names.items() if len(values) > 1
     }
-    return ambiguous_edc_names

@@ -37,10 +37,10 @@ class SimulationFeatures(Flag, boundary=FlagBoundary.STRICT):
         return {
             'dynamic_registration': SimulationFeatures.DYNAMIC_REGISTRATION in self,
             'profile_reuse': SimulationFeatures.PROFILE_REUSE in self,
-            'acknowledge_dynamic_jobs': SimulationFeatures.ACKNOWLEDGE_DYNAMIC_JOBS in self,  # noqa: E501
-            'forward_profiles_on_job_submission': SimulationFeatures.FORWARD_PROFILES_ON_JOB_SUBMISSION in self,  # noqa: E501
-            'forward_profiles_on_jobs_killed': SimulationFeatures.FORWARD_PROFILES_ON_JOBS_KILLED in self,  # noqa: E501
-            'forward_profiles_on_simulation_begins': SimulationFeatures.FORWARD_PROFILES_ON_SIMULATION_BEGINS in self,  # noqa: E501
+            'acknowledge_dynamic_jobs': SimulationFeatures.ACKNOWLEDGE_DYNAMIC_JOBS in self,  # noqa: E501 (reason: improves readability)
+            'forward_profiles_on_job_submission': SimulationFeatures.FORWARD_PROFILES_ON_JOB_SUBMISSION in self,  # noqa: E501 (reason: improves readability)
+            'forward_profiles_on_jobs_killed': SimulationFeatures.FORWARD_PROFILES_ON_JOBS_KILLED in self,  # noqa: E501 (reason: improves readability)
+            'forward_profiles_on_simulation_begins': SimulationFeatures.FORWARD_PROFILES_ON_SIMULATION_BEGINS in self,  # noqa: E501 (reason: improves readability)
         }  # fmt: skip
 
 

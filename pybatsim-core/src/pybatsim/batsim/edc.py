@@ -40,7 +40,7 @@ class Scheduler(ExternalDecisionComponent):
         for event in msg:
             self._dispatch(event)
 
-    def _dispatch(self, event: Event) -> None:  # noqa: PLR0912
+    def _dispatch(self, event: Event) -> None:  # noqa: PLR0912 (reason: dictated by design)
         # We should not receive send-only events: this could be done better
         # with differentiated base classes.
         match event:

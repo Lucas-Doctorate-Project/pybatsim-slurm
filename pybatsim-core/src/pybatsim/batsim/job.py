@@ -45,8 +45,8 @@ class Job:
 
         def __init__(
             self,
-            placement_type: ExecutorPlacementType = ExecutorPlacementType.PredefinedExecutorPlacementStrategyWrapper,  # noqa: E501
-            placement_arg: ExecutorPlacementStrategy = ExecutorPlacementStrategy.SpreadOverHostsFirst,  # noqa: E501
+            placement_type: ExecutorPlacementType = ExecutorPlacementType.PredefinedExecutorPlacementStrategyWrapper,  # noqa: E501 (reason: no alternative)
+            placement_arg: ExecutorPlacementStrategy = ExecutorPlacementStrategy.SpreadOverHostsFirst,  # noqa: E501 (reason: no alternative)
         ):
             self.placement_type = placement_type
 

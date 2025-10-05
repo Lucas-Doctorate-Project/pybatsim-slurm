@@ -229,7 +229,7 @@ class Batsim:
             print(f'Received Batsim message: {protocol_dict}')
             self.deserialize_msg(protocol_dict)
 
-        except Exception:  # noqa: TRY203
+        except Exception:  # noqa: TRY203 (reason: due to the TODO on the next line)
             # TODO: handle json.loads and deserialization exceptions
             raise
 
