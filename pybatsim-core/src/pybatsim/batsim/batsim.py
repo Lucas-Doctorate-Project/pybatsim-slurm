@@ -20,15 +20,15 @@ from .events import (
 )
 from .job import Job, JobId
 
+# SERIALIZATION_FORMAT_BINARY = 1  # unsupported
+SERIALIZATION_FORMAT_JSON = 2
+
+WORKLOAD_JOB_SEPARATOR = '!'
+# ATTEMPT_JOB_SEPARATOR = '#'  # unsupported, used when resubmitting jobs
+
 
 # TODO: Implement public API to access SimulationMetadata
 class Batsim:
-    # SERIALIZATION_FORMAT_BINARY = 1  # unsupported
-    SERIALIZATION_FORMAT_JSON = 2
-
-    WORKLOAD_JOB_SEPARATOR = '!'
-    # ATTEMPT_JOB_SEPARATOR = '#'  # unsupported, used when resubmitting jobs
-
     def __init__(self, *, endpoint: str, timeout: int | None = None):
         self._endpoint: str = endpoint
         self._timeout: int = -1 if timeout is None else timeout
@@ -190,7 +190,7 @@ class Batsim:
             raise ValueError(err_msg)
 
         # Build sequence of bytes to send.
-        serialization_format: bytes = self.SERIALIZATION_FORMAT_JSON.to_bytes(
+        serialization_format: bytes = SERIALIZATION_FORMAT_JSON.to_bytes(
             4, byteorder='little'
         )
         protocol_dict: dict = self.serialize_msg()
