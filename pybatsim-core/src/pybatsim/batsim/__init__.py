@@ -33,8 +33,7 @@ from .events import (
     TurnOnOffHostsEvent,
     TxEvent,
 )
-from .job import Job
-from .profile import Profile
+from .job import Job, Profile
 
 __all__ = [
     'Batsim',

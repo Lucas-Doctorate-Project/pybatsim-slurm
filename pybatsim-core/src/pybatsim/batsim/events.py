@@ -6,8 +6,7 @@ from typing import Any, ClassVar, Final, override
 from procset import ProcSet
 
 from .core import SimulationMetadata
-from .job import FinalState, Job, JobId
-from .profile import Profile
+from .job import FinalState, Job, JobId, Profile
 
 """
 The following batprotocol v1.0.0 events have an experimental implementation.
