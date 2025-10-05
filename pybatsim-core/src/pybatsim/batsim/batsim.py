@@ -40,19 +40,36 @@ WORKLOAD_JOB_SEPARATOR = '!'
 
 # TODO: Implement public API to access SimulationMetadata
 class Batsim:
+    # Communication with the batsim process.
+    _endpoint: str
+    _timeout: int
+    _zmq_socket: zmq.Socket | None
+
+    # Decision logic, injected by the user.
+    _edc: ExternalDecisionComponent | None
+
+    # Simulation-related attributes.
+    _time: float
+    _simulation_metadata: SimulationMetadata
+    _rx: deque[RxEvent]
+    _tx: deque[TxEvent]
+
+    # XXX: This is fragile, we should rather track the state from the state-machine.
+    _received_SimulationEndsEvent: bool  # noqa: N815 (reason: use event name)
+
     def __init__(self, *, endpoint: str, timeout: int | None = None):
-        self._endpoint: str = endpoint
-        self._timeout: int = -1 if timeout is None else timeout
-        self._zmq_socket: zmq.Socket | None = None
+        self._endpoint = endpoint
+        self._timeout = -1 if timeout is None else timeout
+        self._zmq_socket = None
 
         self._edc = None
 
-        self._time: float = 0.0
-        self._simulation_metadata: SimulationMetadata = SimulationMetadata()
-        self._rx: deque[RxEvent] = deque()
-        self._tx: deque[TxEvent] = deque()
+        self._time = 0.0
+        self._simulation_metadata = SimulationMetadata()
+        self._rx = deque()
+        self._tx = deque()
 
-        self._received_SimulationEnds: bool = False
+        self._received_SimulationEndsEvent = False
 
         # Batsim protocol can either send a job id or a full job description.
         # The Python API abstracts this away, and only works with Job.
@@ -223,8 +240,7 @@ class Batsim:
         self._send_edc_hello_msg()
 
     def is_simulation_finished(self) -> bool:
-        # Whether the even SimulationEnds has been received yet
-        return self._received_SimulationEnds
+        return self._received_SimulationEndsEvent
 
     def recv_msg(self) -> None:
         assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
@@ -301,7 +317,7 @@ class Batsim:
         event = RxEvent.from_protocol_dict(protocol_dict)
 
         if isinstance(event, SimulationEndsEvent):
-            self._received_SimulationEnds = True
+            self._received_SimulationEndsEvent = True
 
         elif isinstance(event, JobSubmittedEvent):
             # Batsim sends a full job description in a JobSubmittedEvent.
