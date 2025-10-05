@@ -1,6 +1,11 @@
-from .batsim import SERIALIZATION_FORMAT_JSON, WORKLOAD_JOB_SEPARATOR, Batsim
+from .batsim import (
+    SERIALIZATION_FORMAT_JSON,
+    WORKLOAD_JOB_SEPARATOR,
+    Batsim,
+    ExternalDecisionComponent,
+    Scheduler,
+)
 from .core import SimulationFeatures, SimulationMetadata
-from .edc import ExternalDecisionComponent, Scheduler
 from .events import (
     AllStaticExternalEventsHaveBeenInjectedEvent,
     AllStaticJobsHaveBeenSubmittedEvent,
@@ -33,12 +38,12 @@ from .profile import Profile
 
 __all__ = [
     'Batsim',
+    'ExternalDecisionComponent',
     'SERIALIZATION_FORMAT_JSON',
+    'Scheduler',
     'WORKLOAD_JOB_SEPARATOR',
     'SimulationFeatures',
     'SimulationMetadata',
-    'ExternalDecisionComponent',
-    'Scheduler',
     'AllStaticExternalEventsHaveBeenInjectedEvent',
     'AllStaticJobsHaveBeenSubmittedEvent',
     'CallMeLaterEvent',
