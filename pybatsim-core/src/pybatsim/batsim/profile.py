@@ -2,7 +2,7 @@ from enum import Enum
 
 
 class Profile:
-
+    # TODO: nesting class is not Pythonic
     class ProfileType(Enum):
         DelayProfile = 0
         ParallelTaskProfile = 1
@@ -14,9 +14,7 @@ class Profile:
         ParallelTaskDataStagingBetweenStoragesProfile = 7
         TraceReplayProfile = 8
 
-
-    def __init__(self, profile_id, profile_type,
-                 profile_dict, extra_data = None):
+    def __init__(self, profile_id, profile_type, profile_dict, extra_data=None):
         self.profile_id = profile_id
         self.profile_type = profile_type
         self.profile_dict = profile_dict
@@ -25,9 +23,9 @@ class Profile:
 
     @classmethod
     def from_protocol_dict(cls, json_dict):
-        return cls(json_dict['id'],
-                   Profile.ProfileType[json_dict['profile_type']],
-                   json_dict['profile'],
-                   json_dict.get('extra_data'),
+        return cls(
+            json_dict['id'],
+            Profile.ProfileType[json_dict['profile_type']],
+            json_dict['profile'],
+            json_dict.get('extra_data'),
         )
-

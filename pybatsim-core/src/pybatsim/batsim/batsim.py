@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from collections import deque
+from typing import Self
 
 import zmq
 
@@ -17,7 +18,7 @@ from .events import (
     SimulationEndsEvent,
     TxEvent,
 )
-from .job import Job
+from .job import Job, JobId
 
 
 # TODO: Implement public API to access SimulationMetadata
@@ -26,7 +27,7 @@ class Batsim:
     SERIALIZATION_FORMAT_JSON = 2
 
     WORKLOAD_JOB_SEPARATOR = '!'
-    # ATTEMPT_JOB_SEPARATOR = "#" # Used when resubmitting job
+    # ATTEMPT_JOB_SEPARATOR = '#'  # unsupported, used when resubmitting jobs
 
     def __init__(self, *, endpoint: str, timeout: int | None = None):
         self._endpoint: str = endpoint
@@ -95,24 +96,25 @@ class Batsim:
         #                                                   ╔════════════════════════╗
         #                                                   ║ completed_*,kill_acked ║
         #                                                   ╚════════════════════════╝
-        self._alive_jobs: dict[str, Job] = {}
-        self._zombie_jobs: dict[str, Job] = {}
+        self._alive_jobs: dict[JobId, Job] = {}
+        self._zombie_jobs: dict[JobId, Job] = {}
 
-    def __setup_zmq(self):
+    def __setup_zmq(self) -> None:
         context = zmq.Context()
         context.setsockopt(zmq.RCVTIMEO, self._timeout)
 
         self._zmq_socket = context.socket(socket_type=zmq.REP)
         self._zmq_socket.bind(self._endpoint)
-        # replace _endpoint with the actual endpoint in use (no wildcard)
+        # Replace _endpoint with the actual endpoint in use (no wildcard).
         self._endpoint = self._zmq_socket.getsockopt(zmq.LAST_ENDPOINT)
 
-    def __teardown_zmq(self):
+    def __teardown_zmq(self) -> None:
+        assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
         self._zmq_socket.unbind(self._endpoint)
         self._zmq_socket.close()
         self._zmq_socket.context.destroy()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         self.__setup_zmq()  # connect to Batsim ØMQ socket
 
         try:
@@ -135,15 +137,15 @@ class Batsim:
         return self._zmq_socket is not None and not self._zmq_socket.closed
 
     @property
-    def time(self):
+    def time(self) -> float:
         return self._time
 
-    def consume_time(self, time: float):
+    def consume_time(self, time: float) -> None:
         assert time > 0, 'cannot go back in time'
         self._time += time
 
     @property
-    def simulation_metadata(self):
+    def simulation_metadata(self) -> SimulationMetadata:
         return self._simulation_metadata
 
     def _recv_init_msg(self) -> None:
@@ -170,13 +172,13 @@ class Batsim:
         self._simulation_metadata.edc_init_str = data[:data_size].decode('utf-8')
 
     def _send_edc_hello_msg(self) -> None:
-        # prepare and send the first EDC message (answer to the init message)
+        # Prepare and send the first EDC message (answer to the init message)
         # message format:
         # 1. serialization_format(uint32)
         # 2. serialized message with the EDCHelloEvent
         assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
 
-        # check _tx buffer contains a single event of type EDCHelloEvent
+        # Check _tx buffer contains a single event of type EDCHelloEvent.
         if not isinstance(self._tx[0], EDCHelloEvent):
             err_msg = (
                 f"EDC asked to send '{type(self._tx[0]).__name__}', "
@@ -187,7 +189,7 @@ class Batsim:
             err_msg = "EDC hello message must contain a single 'EDCHelloEvent'"
             raise ValueError(err_msg)
 
-        # build sequence of bytes to send
+        # Build sequence of bytes to send.
         serialization_format: bytes = self.SERIALIZATION_FORMAT_JSON.to_bytes(
             4, byteorder='little'
         )
@@ -209,7 +211,7 @@ class Batsim:
         #   ExternalDecisionComponent.
         self._send_edc_hello_msg()
 
-    def is_simulation_finished(self):
+    def is_simulation_finished(self) -> bool:
         # Whether the even SimulationEnds has been received yet
         return self._received_SimulationEnds
 
@@ -227,7 +229,7 @@ class Batsim:
             print(f'Received Batsim message: {protocol_dict}')
             self.deserialize_msg(protocol_dict)
 
-        except Exception:
+        except Exception:  # noqa: TRY203
             # TODO: handle json.loads and deserialization exceptions
             raise
 
@@ -236,7 +238,7 @@ class Batsim:
         assert self._edc is not None, 'uninitialized _edc'
         self._edc.handle_msg(self._rx)
 
-    def send_msg(self):
+    def send_msg(self) -> None:
         """Send the built answer message to Batsim."""
         protocol_dict = self.serialize_msg()
         print(f'Sending to Batsim:\n{protocol_dict}')
@@ -246,7 +248,7 @@ class Batsim:
     def pop_event(self) -> RxEvent:
         return self._rx.popleft()
 
-    def append_event(self, event: TxEvent):
+    def append_event(self, event: TxEvent) -> None:
         """Add event to the next message for Batsim."""
         if isinstance(event, RejectJobEvent):
             # Remove from _alive_jobs as RejectJobEvent is the last possible
@@ -267,7 +269,9 @@ class Batsim:
         self._tx.append(event)
 
     def deserialize_event(self, protocol_dict) -> RxEvent:
-        # hacky: inject jobs in protocol_dict when relevant
+        # For events only containing a job id, retrieve the corresponding Job
+        # object from _alive_jobs and inject it in protocol_dict.
+        # This allows RxEvent.from_protocol_dict to work with the correct objet.
         if protocol_dict['event_type'] == 'JobCompletedEvent':
             # Remove job from _alive_jobs as this is the last related event
             # received from Batsim.
@@ -299,13 +303,16 @@ class Batsim:
             if job is not new_job:
                 # Dynamic jobs are submitted back by Batsim only if an
                 # acknowledgment is requested.
-                assert SimulationFeatures.ACKNOWLEDGE_DYNAMIC_JOBS in self.simulation_metadata.requested_features
+                assert (
+                    SimulationFeatures.ACKNOWLEDGE_DYNAMIC_JOBS
+                    in self.simulation_metadata.requested_features
+                )
 
                 # Update the existing dynamic job in place.
-                assert job.submission_time is None, "overwriting job.submission_time"
+                assert job.submission_time is None, 'overwriting job.submission_time'
                 job.submission_time = new_job.submission_time
 
-                assert job.profile_dict is None, "overwriting job.profile_dict"
+                assert job.profile_dict is None, 'overwriting job.profile_dict'
                 job.profile_dict = new_job.profile_dict
 
                 # Reuse the existing dynamic job in the deserialized event.
@@ -319,7 +326,7 @@ class Batsim:
         assert self._time <= protocol_dict['now'], 'decreasing simulation time'
         self._time = protocol_dict['now']
 
-        # fill _rx buffer with the events received in current msg
+        # Fill _rx buffer with the events received in current msg.
         for event_dict in protocol_dict['events']:
             print('--- Received event of type', event_dict['event_type'])
             event = self.deserialize_event(event_dict)

@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Flag, FlagBoundary, auto
 
-from .job import Job
-
 
 class SimulationFeatures(Flag, boundary=FlagBoundary.STRICT):
     """
@@ -39,20 +37,26 @@ class SimulationFeatures(Flag, boundary=FlagBoundary.STRICT):
         return {
             'dynamic_registration': SimulationFeatures.DYNAMIC_REGISTRATION in self,
             'profile_reuse': SimulationFeatures.PROFILE_REUSE in self,
-            'acknowledge_dynamic_jobs': SimulationFeatures.ACKNOWLEDGE_DYNAMIC_JOBS in self,
-            'forward_profiles_on_job_submission': SimulationFeatures.FORWARD_PROFILES_ON_JOB_SUBMISSION in self,
-            'forward_profiles_on_jobs_killed': SimulationFeatures.FORWARD_PROFILES_ON_JOBS_KILLED in self,
-            'forward_profiles_on_simulation_begins': SimulationFeatures.FORWARD_PROFILES_ON_SIMULATION_BEGINS in self,
-        }
+            'acknowledge_dynamic_jobs': SimulationFeatures.ACKNOWLEDGE_DYNAMIC_JOBS in self,  # noqa: E501
+            'forward_profiles_on_job_submission': SimulationFeatures.FORWARD_PROFILES_ON_JOB_SUBMISSION in self,  # noqa: E501
+            'forward_profiles_on_jobs_killed': SimulationFeatures.FORWARD_PROFILES_ON_JOBS_KILLED in self,  # noqa: E501
+            'forward_profiles_on_simulation_begins': SimulationFeatures.FORWARD_PROFILES_ON_SIMULATION_BEGINS in self,  # noqa: E501
+        }  # fmt: skip
 
 
-# Stores all simulation parameters and information exchanged in the hello events
 @dataclass
 class SimulationMetadata:
+    """
+    Container for information about the simulation.
+
+    The information contained in SimulationMetadata is set during the initial
+    handshake with Batsim.
+    """
+
     edc_init_str: str | None = None
 
     # Batsim and batprotocol information
-    batprotocol_version: str = "1.0.0"
+    batprotocol_version: str = '1.0.0'
     batsim_version: str | None = None
     batsim_commit: str | None = None
 
@@ -61,6 +65,6 @@ class SimulationMetadata:
 
     def to_protocol_dict(self):
         return {
-            "batprotocol_version": self.batprotocol_version,
-            "requested_simulation_features": self.requested_features.to_protocol_dict(),
+            'batprotocol_version': self.batprotocol_version,
+            'requested_simulation_features': self.requested_features.to_protocol_dict(),
         }

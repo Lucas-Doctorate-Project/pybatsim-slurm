@@ -3,22 +3,20 @@ from typing import Protocol
 
 from .batsim import Batsim
 from .events import (
-    AllStaticJobsHaveBeenSubmittedEvent,
     AllStaticExternalEventsHaveBeenInjectedEvent,
-    EDCHelloEvent,
+    AllStaticJobsHaveBeenSubmittedEvent,
     Event,
-    TxEvent,
-    ExecuteJobEvent,
-    JobCompletedEvent,
-    JobSubmittedEvent,
-    RejectJobEvent,
-    JobsKilledEvent,
-    RequestedCallEvent,
     ExternalEventOccurredEvent,
     HostsPStateChangedEvent,
     HostsTurnedOnOffEvent,
+    JobCompletedEvent,
+    JobsKilledEvent,
+    JobSubmittedEvent,
+    RequestedCallEvent,
+    RxEvent,
     SimulationBeginsEvent,
     SimulationEndsEvent,
+    TxEvent,
 )
 
 
@@ -42,10 +40,9 @@ class Scheduler(ExternalDecisionComponent):
         for event in msg:
             self._dispatch(event)
 
-    def _dispatch(self, event: Event) -> None:
-        # We should not receive send-only events
-        assert not isinstance(event, TxEvent), f"Unexpected send-only Event '{type(event).__name__}'"
-
+    def _dispatch(self, event: Event) -> None:  # noqa: PLR0912
+        # We should not receive send-only events: this could be done better
+        # with differentiated base classes.
         match event:
             # receive-only events
             case JobSubmittedEvent():
@@ -71,7 +68,17 @@ class Scheduler(ExternalDecisionComponent):
             case AllStaticExternalEventsHaveBeenInjectedEvent():
                 self.handle_no_more_external_events(event)
 
-            # catch-all for unknown events
+            # Unsupported receive events.
+            case RxEvent():
+                err_msg = f"Unsupported receive Event '{type(event).__name__}'"
+                raise TypeError(err_msg)
+
+            # Send-only events.
+            case TxEvent():
+                err_msg = f"Unexpected send-only Event '{type(event).__name__}'"
+                raise TypeError(err_msg)
+
+            # Catch-all for unknown events.
             case _:
                 err_msg = f"Unknown Event '{type(event).__name__}'"
                 raise TypeError(err_msg)
@@ -103,10 +110,14 @@ class Scheduler(ExternalDecisionComponent):
     def handle_requested_call(self, event: RequestedCallEvent) -> None:
         pass
 
-    def handle_no_more_static_jobs(self, event: AllStaticJobsHaveBeenSubmittedEvent):
+    def handle_no_more_static_jobs(
+        self, event: AllStaticJobsHaveBeenSubmittedEvent
+    ) -> None:
         pass
 
-    def handle_no_more_external_events(self, event: AllStaticExternalEventsHaveBeenInjectedEvent):
+    def handle_no_more_external_events(
+        self, event: AllStaticExternalEventsHaveBeenInjectedEvent
+    ) -> None:
         pass
 
     def finalize(self):

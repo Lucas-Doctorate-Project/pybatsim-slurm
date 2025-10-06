@@ -1,51 +1,54 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, Final, override
 from enum import Enum
+from typing import Any, ClassVar, Final, override
+
 from procset import ProcSet
 
 from .core import SimulationMetadata
-from .job import Job
+from .job import FinalState, Job, JobId
 from .profile import Profile
 
-'''
-List of batprotocol events:
+"""
+The following batprotocol v1.0.0 events have an experimental implementation.
+They may change behavior in a breaking manner upon minor version update.
 
-      OK JobSubmittedEvent
-      OK JobCompletedEvent
-      OK RejectJobEvent
-      OK ExecuteJobEvent
-      Ok KillJobsEvent
-      OK JobsKilledEvent
+- ExecuteJobEvent
+- JobsKilledEvent
+- RegisterProfileEvent
+- SimulationBeginsEvent
 
-    TODO RegisterProfileEvent
-    TODO RegisterJobEvent
-    TODO FinishRegistrationEvent
 
-    TODO CreateProbeEvent
-    TODO StopProbeEvent
-    TODO TriggerProbeEvent
-    TODO ResetProbeEvent
-    TODO ProbeDataEmittedEvent
-      OK CallMeLaterEvent
-      OK RequestedCallEvent
-      OK StopCallMeLaterEvent
+The following batprotocol v1.0.0 events are unsupported.
+They may be implemented in a subsequent minor version.
 
-      OK EDCHelloEvent
-      OK SimulationBeginsEvent
-      OK SimulationEndsEvent
+- CreateProbeEvent
+- StopProbeEvent
+- TriggerProbeEvent
+- ResetProbeEvent
+- ProbeDataEmittedEvent
+"""
 
-      OK AllStaticJobsHaveBeenSubmittedEvent
-      OK AllStaticExternalEventsHaveBeenInjectedEvent
-      OK ForceSimulationStopEvent
-      OK SimulationErrorEvent
-      OK ExternalEventOccurredEvent
 
-      OK ChangeHostPStateEvent
-      OK HostPStateChangedEvent
-      OK TurnOnOffHostsEvent
-      OK HostsTurnedOnOffEvent
-'''
+def __experimental(*, reason: str | None = None):
+    """Decorator to identify experimental features."""
+
+    def decorator(obj):
+        # Craft experimental note.
+        entity_type = 'class' if isinstance(obj, type) else 'function'
+        note = f'This {entity_type} is experimental and is subject to backward-incompatible changes upon minor releases.'  # noqa: E501
+        if reason:
+            note += f'\nReason: {reason}'
+
+        # Update docstring.
+        if obj.__doc__:
+            obj.__doc__ += f'\n\n{note}'
+        else:
+            obj.__doc__ = note
+
+        return obj
+
+    return decorator
 
 
 # abstract base classes  -------------------------------------------------------
@@ -57,7 +60,7 @@ class Event:
     timestamp: float
 
     def __new__(cls, *_args, **_kwargs):
-        # ensure Event, RxEvent or TxEvent are not instantiated, see:
+        # Ensure Event, RxEvent or TxEvent are not instantiated, see:
         # - https://stackoverflow.com/a/7990308
         # - https://docs.python.org/3/reference/datamodel.html#object.__new__
         if cls in (Event, RxEvent, TxEvent):
@@ -65,15 +68,15 @@ class Event:
             raise TypeError(err_msg)
 
         # We pass only cls to object.__new__() as we also define __init__().
-        # However, we need to keep args and kwargs in the signature as they
-        # are forwarded to __init__().
+        # However, we need to keep args and kwargs in the signature as they are
+        # forwarded to __init__().
         return object.__new__(cls)
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls._batprotocol_events[cls.__name__] = cls
 
-    def __init__(self, timestamp):
+    def __init__(self, timestamp: float):
         self.timestamp = timestamp
 
 
@@ -96,30 +99,31 @@ class TxEvent(Event):
 
 # concrete classes  ------------------------------------------------------------
 
-######################
-######################
-## RxEvent classes  ------------------------------------------------------------
-######################
-######################
 
+# TODO(rb):
+#   dispatch elements of _payload to attributes with semantic types:
+#     - SimulationMetadata
+#     - (to create/define) Simulation(Args|Params|Context)
+@__experimental(reason='_payload is yet to be mapped to semantic types.')
 class SimulationBeginsEvent(RxEvent):
-    whole_dict: dict
-    computation_host_number: int
-    # TODO: Handle me correctly. Put all information in separate attributes?
+    _payload: dict
 
     @override
-    def __init__(self, timestamp, whole_dict):
+    def __init__(self, timestamp: float, payload: dict):
         super().__init__(timestamp)
-        self.whole_dict = whole_dict
-        self.computation_host_number = whole_dict['computation_host_number']
+        self._payload = payload
 
     @override
     @classmethod
     def from_protocol_dict(cls, payload: dict) -> SimulationBeginsEvent:
         return cls(
             timestamp=payload['timestamp'],
-            whole_dict=payload['event'],
+            payload=payload['event'],
         )
+
+    @property
+    def computation_host_number(self) -> int:
+        return self._payload['computation_host_number']
 
 
 class SimulationEndsEvent(RxEvent):
@@ -135,26 +139,36 @@ class JobSubmittedEvent(RxEvent):
     job: Job
 
     @override
-    def __init__(self, timestamp, job):
+    def __init__(self, timestamp: float, job: Job):
         super().__init__(timestamp)
         self.job = job
 
     @override
     @classmethod
     def from_protocol_dict(cls, payload: dict) -> JobSubmittedEvent:
+        job = Job(
+            job_id=payload['event']['job_id'],
+            resource_request=payload['event']['job']['resource_request'],
+            walltime=payload['event']['job']['walltime'],
+            profile_id=payload['event']['job']['profile_id'],
+            extra_data=payload['event']['job'].get('extra_data'),
+        )
+        job.submission_time = payload['event']['submission_time']
+        job.profile_dict = payload['event'].get('profile')
+
         return cls(
             timestamp=payload['timestamp'],
-            job=Job.from_protocol_dict(payload['event']),
+            job=job,
         )
 
 
 class JobCompletedEvent(RxEvent):
     job: Job
-    state: Any  # XXX: assign real type
+    state: FinalState
     return_code: int
 
     @override
-    def __init__(self, timestamp, job, state, return_code):
+    def __init__(self, timestamp: float, job: Job, state: FinalState, return_code: int):
         super().__init__(timestamp)
         self.job = job
         self.state = state
@@ -167,15 +181,21 @@ class JobCompletedEvent(RxEvent):
         return cls(
             timestamp=payload['timestamp'],
             job=payload['__pybatsim_job'],  # injected by deserialisation
-            state=payload['event']['state'],
+            state=FinalState(payload['event']['state']),
             return_code=payload['event']['return_code'],
         )
 
+
+@__experimental(reason='progress is yet to be mapped to a semantic type.')
 class JobsKilledEvent(RxEvent):
+    # TODO(rb): consider using a list of tuples
     jobs: list[Job]
+    progresses: dict[JobId, dict] = {}
 
     @override
-    def __init__(self, timestamp, jobs, progresses):
+    def __init__(
+        self, timestamp: float, jobs: list[Job], progresses: dict[JobId, dict]
+    ):
         super().__init__(timestamp)
         self.jobs = jobs
         self.progresses = progresses
@@ -183,7 +203,7 @@ class JobsKilledEvent(RxEvent):
     @override
     @classmethod
     def from_protocol_dict(cls, payload: dict) -> JobsKilledEvent:
-        progresses: dict[str, dict] = {}
+        progresses: dict[JobId, dict] = {}
         for progress_dict in payload['event']['progresses']:
             job_id = progress_dict['job_id']
             # TODO: correctly deserialise the wrapped progress in a KillProgress object
@@ -191,19 +211,20 @@ class JobsKilledEvent(RxEvent):
 
         return cls(
             timestamp=payload['timestamp'],
-            jobs=payload['__pybatsim_jobs'], # injected by deserialisation
+            jobs=payload['__pybatsim_dead_jobs'],  # injected by deserialisation
             progresses=progresses,
         )
 
+
 class RequestedCallEvent(RxEvent):
-    call_me_later_id: str
-    last_periodic_call: bool
+    call_id: str
+    is_last_call: bool
 
     @override
-    def __init__(self, timestamp, call_id, last_call):
+    def __init__(self, timestamp: float, call_id: str, is_last_call: bool):
         super().__init__(timestamp)
-        self.call_me_later_id = call_id
-        self.last_periodic_call = last_call
+        self.call_id = call_id
+        self.is_last_call = is_last_call
 
     @override
     @classmethod
@@ -211,18 +232,25 @@ class RequestedCallEvent(RxEvent):
         return cls(
             timestamp=payload['timestamp'],
             call_id=payload['event']['call_me_later_id'],
-            last_call=payload['event']['last_periodic_call'],
+            is_last_call=payload['event']['last_periodic_call'],
         )
 
 
 class ExternalEventOccurredEvent(RxEvent):
     external_event_id: str
-    # TODO: make the event type an Enum? But for the moment only one type "GenericExternalEvent"
+    # TODO: consider using an enum, might be overkill as there exists a single
+    # type as of now (GenericExternalEvent)
     external_event_type: str
     external_event: dict
 
     @override
-    def __init__(self, timestamp, external_event_id, external_event_type, external_event):
+    def __init__(
+        self,
+        timestamp: float,
+        external_event_id: str,
+        external_event_type: str,
+        external_event: dict,
+    ):
         super().__init__(timestamp)
         self.external_event_id = external_event_id
         self.external_event_type = external_event_type
@@ -247,28 +275,15 @@ class AllStaticJobsHaveBeenSubmittedEvent(RxEvent):
             timestamp=payload['timestamp'],
         )
 
+
 class AllStaticExternalEventsHaveBeenInjectedEvent(RxEvent):
     @override
     @classmethod
-    def from_protocol_dict(cls, payload: dict) -> AllStaticExternalEventsHaveBeenInjectedEvent:
+    def from_protocol_dict(
+        cls, payload: dict
+    ) -> AllStaticExternalEventsHaveBeenInjectedEvent:
         return cls(
             timestamp=payload['timestamp'],
-        )
-
-class SimulationErrorEvent(RxEvent):
-    error: str
-
-    @override
-    def __init__(self, timestamp, error):
-        super().__init__(timestamp)
-        self.error = error
-
-    @override
-    @classmethod
-    def from_protocol_dict(cls, payload: dict) -> SimulationErrorEvent:
-        return cls(
-            timestamp=payload['timestamp'],
-            error=payload['event']['error'],
         )
 
 
@@ -277,7 +292,7 @@ class HostsPStateChangedEvent(RxEvent):
     pstate: int
 
     @override
-    def __init__(self, timestamp, host_ids, pstate):
+    def __init__(self, timestamp: float, host_ids: ProcSet, pstate: int):
         super().__init__(timestamp)
         self.host_ids = host_ids
         self.pstate = pstate
@@ -297,7 +312,7 @@ class HostsTurnedOnOffEvent(RxEvent):
     state: int
 
     @override
-    def __init__(self, timestamp, host_ids, state):
+    def __init__(self, timestamp: float, host_ids: ProcSet, state: int):
         super().__init__(timestamp)
         self.host_ids = host_ids
         self.state = state
@@ -312,13 +327,6 @@ class HostsTurnedOnOffEvent(RxEvent):
         )
 
 
-######################
-######################
-## TxEvent classes  ------------------------------------------------------------
-######################
-######################
-
-
 class EDCHelloEvent(TxEvent):
     simulation_metadata: SimulationMetadata
     # TODO: consider integrating edc_* in simulation_metadata
@@ -327,7 +335,14 @@ class EDCHelloEvent(TxEvent):
     edc_commit: str
 
     @override
-    def __init__(self, timestamp, simulation_metadata, edc_name, edc_version, edc_commit):
+    def __init__(
+        self,
+        timestamp: float,
+        simulation_metadata: SimulationMetadata,
+        edc_name: str,
+        edc_version: str,
+        edc_commit: str,
+    ):
         super().__init__(timestamp)
         self.simulation_metadata = simulation_metadata
         self.edc_name = edc_name
@@ -353,34 +368,44 @@ class RejectJobEvent(TxEvent):
     job: Job
 
     @override
-    def __init__(self, timestamp, job: Job):
+    def __init__(self, timestamp: float, job: Job):
         super().__init__(timestamp)
         self.job = job
 
     @override
     def to_protocol_dict(self) -> dict:
         protocol_dict = super().to_protocol_dict()
-        payload = protocol_dict['event']
-
-        payload |= {
+        protocol_dict['event'] |= {
             'job_id': self.job.job_id,
         }
-
         return protocol_dict
 
 
+@__experimental(reason='Placement policy will be coerced in a semantic type.')
 class ExecuteJobEvent(TxEvent):
     job: Job
-    # TODO: merge executor_placement, profile_allocation_override, storage_placement in PlacementPolicy object
+    # TODO: merge executor_placement, profile_allocation_override,
+    # storage_placement in PlacementPolicy object
     executor_placement: Job.ExecutorPlacement
     profile_allocation_override: Any | None = None
     storage_placement: Any | None = None
 
     @override
-    def __init__(self, timestamp, job, executor_placement=None, profile_allocation_override=None, storage_placement=None):
+    def __init__(
+        self,
+        timestamp: float,
+        job: Job,
+        executor_placement: Job.ExecutorPlacement | None = None,
+        profile_allocation_override: Any | None = None,
+        storage_placement: Any | None = None,
+    ):
         super().__init__(timestamp)
         self.job = job
-        self.executor_placement = Job.ExecutorPlacement() if executor_placement is None else executor_placement
+        self.executor_placement = (
+            Job.ExecutorPlacement()
+            if executor_placement is None
+            else executor_placement
+        )
         self.profile_allocation_override = profile_allocation_override
         self.storage_placement = storage_placement
 
@@ -407,140 +432,147 @@ class ExecuteJobEvent(TxEvent):
 
         return protocol_dict
 
+
 class KillJobsEvent(TxEvent):
     jobs: list[Job]
 
     @override
-    def __init__(self, timestamp, jobs):
+    def __init__(self, timestamp: float, jobs: list[Job]):
         super().__init__(timestamp)
         self.jobs = jobs
 
     @override
     def to_protocol_dict(self) -> dict:
         protocol_dict = super().to_protocol_dict()
-        payload = protocol_dict['event']
-
-        payload |= {
-            'job_ids': [job.job_id for job in self.jobs]
+        protocol_dict['event'] |= {
+            'job_ids': [job.job_id for job in self.jobs],
         }
-
         return protocol_dict
 
 
 class CallMeLaterEvent(TxEvent):
-
+    # TODO: nesting class is not Pythonic
     class TemporalTriggerType(Enum):
         OneShot = 0
         Periodic = 1
 
-    call_me_later_id: str
+    call_id: str
     when_type: TemporalTriggerType
-    when: dict
+    when: dict  # TODO: consider using an object
 
     @override
-    def __init__(self, timestamp, call_id, when_type, when_dict):
+    def __init__(
+        self,
+        timestamp: float,
+        call_id: str,
+        when_type: TemporalTriggerType,
+        when_dict: dict,
+    ):
         super().__init__(timestamp)
-        self.call_me_later_id = call_id
+        self.call_id = call_id
         self.when_type = when_type
         self.when = when_dict
 
     @override
     def to_protocol_dict(self) -> dict:
         protocol_dict = super().to_protocol_dict()
-        payload = protocol_dict['event']
-
-        payload |= {
-            'call_me_later_id': self.call_me_later_id,
+        protocol_dict['event'] |= {
+            'call_me_later_id': self.call_id,
             'when_type': self.when_type.name,
-            'when': self.when, # TODO: make it an object? (but REALLY VERBOSE)
+            'when': self.when,
         }
-
         return protocol_dict
 
+
 class StopCallMeLaterEvent(TxEvent):
-    call_me_later_id: str
+    call_id: str
 
     @override
-    def __init__(self, timestamp, call_id):
+    def __init__(self, timestamp: float, call_id: str):
         super().__init__(timestamp)
-        self.call_me_later_id = call_id
+        self.call_id = call_id
 
     @override
     def to_protocol_dict(self) -> dict:
         protocol_dict = super().to_protocol_dict()
-        payload = protocol_dict['event']
-
-        payload |= {
-            'call_me_later_id': self.call_me_later_id,
+        protocol_dict['event'] |= {
+            'call_me_later_id': self.call_id,
         }
-
         return protocol_dict
 
+
 class ForceSimulationStopEvent(TxEvent):
+    # Empty payload: use base behavior.
     pass
-    # Nothing specific for this event, its payload is empty
+
 
 class FinishRegistrationEvent(TxEvent):
+    # Empty payload: use base behavior.
     pass
-    # Nothing specific for this event, its payload is empty
+
 
 class RegisterJobEvent(TxEvent):
     job: Job
 
     @override
-    def __init__(self, timestamp, job):
+    def __init__(self, timestamp: float, job: Job):
         super().__init__(timestamp)
         self.job = job
+        # XXX: job.submission_time will never be set if ack of dynamic jobs is
+        # disabled: consider injecting timestamp as job.submission_time
 
     @override
     def to_protocol_dict(self) -> dict:
         protocol_dict = super().to_protocol_dict()
-        payload = protocol_dict['event']
 
-        payload |= {
-            'job_id': self.job.job_id,
-            'job': {
-                'resource_request': self.job.resource_request,
-                'walltime': self.job.walltime,
-                'profile_id': self.job.profile_id
-            }
+        job_dict = {
+            'resource_request': self.job.resource_request,
+            'walltime': self.job.walltime,
+            'profile_id': self.job.profile_id,
         }
-
         if self.job.extra_data is not None:
-            payload['job']['extra_data'] = self.job.extra_data
+            job_dict['extra_data'] = self.job.extra_data
+
+        protocol_dict['event'] |= {
+            'job_id': self.job.job_id,
+            'job': job_dict,
+        }
 
         return protocol_dict
 
+
+@__experimental(reason='Profile will be mapped to a semantic type')
 class RegisterProfileEvent(TxEvent):
     profile: Profile
 
     @override
-    def __init__(self, timestamp, profile):
+    def __init__(self, timestamp: float, profile: Profile):
         super().__init__(timestamp)
         self.profile = profile
 
     @override
     def to_protocol_dict(self) -> dict:
         protocol_dict = super().to_protocol_dict()
-        payload = protocol_dict['event']
 
-        payload |= { 'profile': {
+        profile_dict = {
             'id': self.profile.profile_id,
             'profile_type': self.profile.profile_type.name,
             'profile': self.profile.profile_dict,
-        }}
-
+        }
         if self.profile.extra_data is not None:
-            payload['profile']['extra_data'] = self.profile.extra_data
+            profile_dict['extra_data'] = self.profile.extra_data
+
+        protocol_dict['event'] |= {'profile': profile_dict}
 
         return protocol_dict
+
 
 class ChangeHostsPStateEvent(TxEvent):
     host_ids: ProcSet
     pstate: int
 
     @override
-    def __init__(self, timestamp, host_ids, pstate):
+    def __init__(self, timestamp: float, host_ids: ProcSet, pstate: int):
         super().__init__(timestamp)
         self.host_ids = host_ids
         self.pstate = pstate
@@ -548,21 +580,19 @@ class ChangeHostsPStateEvent(TxEvent):
     @override
     def to_protocol_dict(self) -> dict:
         protocol_dict = super().to_protocol_dict()
-        payload = protocol_dict['event']
-
-        payload |= {
+        protocol_dict['event'] |= {
             'host_ids': str(self.host_ids),
-            'pstate': self.pstate
+            'pstate': self.pstate,
         }
-
         return protocol_dict
+
 
 class TurnOnOffHostsEvent(TxEvent):
     host_ids: ProcSet
     state: int
 
     @override
-    def __init__(self, timestamp, host_ids, state):
+    def __init__(self, timestamp: float, host_ids: ProcSet, state: int):
         super().__init__(timestamp)
         self.host_ids = host_ids
         self.state = state
@@ -570,11 +600,8 @@ class TurnOnOffHostsEvent(TxEvent):
     @override
     def to_protocol_dict(self) -> dict:
         protocol_dict = super().to_protocol_dict()
-        payload = protocol_dict['event']
-
-        payload |= {
+        protocol_dict['event'] |= {
             'host_ids': str(self.host_ids),
-            'state': self.state
+            'state': self.state,
         }
-
         return protocol_dict
