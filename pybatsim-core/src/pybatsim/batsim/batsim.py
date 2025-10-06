@@ -6,12 +6,13 @@ from collections import deque
 
 import zmq
 
-from .core import SimulationMetadata
+from .core import SimulationFeatures, SimulationMetadata
 from .events import (
     EDCHelloEvent,
     JobSubmittedEvent,
-    RejectJobEvent,
     KillJobsEvent,
+    RegisterJobEvent,
+    RejectJobEvent,
     RxEvent,
     SimulationEndsEvent,
     TxEvent,
@@ -40,8 +41,62 @@ class Batsim:
         self._tx: deque[TxEvent] = deque()
 
         self._received_SimulationEnds: bool = False
+
+        # Batsim protocol can either send a job id or a full job description.
+        # The Python API abstracts this away, and only works with Job.
+        # _alive_jobs and _zombie_jobs ensure each Job object lives at least as
+        # long as needed: an EDC may further extend a job's life.
+        # _zombie_jobs extends the life of jobs with a pending death acknowledgment.
+        #
+        # The state machine of jobs, as known by pybatsim, is summarized below.
+        # Initial states are drawn as rectangle with single lines.
+        # Final states are drawn as rectangles with double lines.
+        # Other states are drawn as dashed ovals.
+        #
+        # States are marked with A for jobs in _alive_jobs, Z for jobs in _zombie_jobs.
+        # In the 'declared' state, only dynamic jobs are known by pybatsim:
+        # static jobs are created when Batsim sends a JobSubmittedEvent.
+        #
+        # ┌────────────┐  ┌─────────────┐
+        # │ static job │  │ dynamic job │───────────┐
+        # └────────────┘  └─────────────┘           │
+        #        │               │                  │
+        #        │            ack &&           not(ack) &&
+        #        │        RegisterJob[tx]    RegisterJob[tx]
+        #        │               🠇                  │
+        #        │         ╭╌╌╌╌╌╌╌╌╌╌╮             │
+        #        └──╴ε╶───>╎ declared ╎             │
+        #                  ╎     A*   ╎             │
+        #                  ╰╌╌╌╌╌╌╌╌╌╌╯             │
+        #                        │                  │
+        #                 JobSubmitted[rx]          │
+        #                        🠇                  │
+        #                  ╭╌╌╌╌╌╌╌╌╌╌╌╮            │
+        #       ┌──────────╎ submitted ╎<───────────┘
+        #       │          ╎     A     ╎
+        #       │          ╰╌╌╌╌╌╌╌╌╌╌╌╯
+        #       │                │
+        # RejectJob[tx]    ExecuteJob[tx]
+        #       🠇                🠇
+        # ╔══════════╗      ╭╌╌╌╌╌╌╌╌╌╮                      ╭╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╮
+        # ║ rejected ║      ╎ running ╎────╴KillJob[tx]╶────>╎ running,kill_received ╎
+        # ╚══════════╝      ╎    A    ╎                      ╎          A,Z          ╎
+        #                   ╰╌╌╌╌╌╌╌╌╌╯                      ╰╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╯
+        #                        │                                       │
+        #                 JobCompleted[rx]                        JobCompleted[rx]
+        #                        🠇                                       🠇
+        #                 ╔═════════════╗                  ╭╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╮
+        #                 ║ completed_* ║──╴KillJob[tx]╶──>╎ completed_*,kill_received ╎
+        #                 ╚═════════════╝                  ╎             Z             ╎
+        #                                                  ╰╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╯
+        #                                                                │
+        #                                                         JobKillled[rx]
+        #                                                                🠇
+        #                                                   ╔════════════════════════╗
+        #                                                   ║ completed_*,kill_acked ║
+        #                                                   ╚════════════════════════╝
         self._alive_jobs: dict[str, Job] = {}
-        self._kill_requested_jobs: dict[str, Job] = {}
+        self._zombie_jobs: dict[str, Job] = {}
 
     def __setup_zmq(self):
         context = zmq.Context()
@@ -83,8 +138,9 @@ class Batsim:
     def time(self):
         return self._time
 
-    def consume_time(self, time_consumed):
-        self._time += time_consumed
+    def consume_time(self, time: float):
+        assert time > 0, 'cannot go back in time'
+        self._time += time
 
     @property
     def simulation_metadata(self):
@@ -193,38 +249,67 @@ class Batsim:
     def append_event(self, event: TxEvent):
         """Add event to the next message for Batsim."""
         if isinstance(event, RejectJobEvent):
-            # remove from alive_jobs as this is the last possible event sent to Batsim
-            self._alive_jobs.pop(event.job.job_id)
-        if isinstance(event, KillJobsEvent):
-            # keep separate references to Job objects
+            # Remove from _alive_jobs as RejectJobEvent is the last possible
+            # event sent to Batsim.
+            assert event.job.job_id not in self._zombie_jobs
+            del self._alive_jobs[event.job.job_id]
+
+        elif isinstance(event, KillJobsEvent):
+            # Extend lifetime of of jobs until we receive their death acknowledgment.
             for job in event.jobs:
-                self._kill_requested_jobs[job.job_id] = job
+                self._zombie_jobs[job.job_id] = job
+
+        elif isinstance(event, RegisterJobEvent):
+            # event.job is a dynamic job created by the EDC: keep track of it.
+            assert event.job.job_id not in self._alive_jobs
+            self._alive_jobs[event.job.job_id] = event.job
 
         self._tx.append(event)
 
     def deserialize_event(self, protocol_dict) -> RxEvent:
         # hacky: inject jobs in protocol_dict when relevant
         if protocol_dict['event_type'] == 'JobCompletedEvent':
-            # remove from alive_jobs as this is the last possible event from Batsim
+            # Remove job from _alive_jobs as this is the last related event
+            # received from Batsim.
+            # The job may still be present in _zombie_jobs.
             job = self._alive_jobs.pop(protocol_dict['event']['job_id'])
             protocol_dict['__pybatsim_job'] = job
-        if protocol_dict['event_type'] == 'JobsKilledEvent':
-            jobs = []
+
+        elif protocol_dict['event_type'] == 'JobsKilledEvent':
+            dead_jobs = []
             for job_id in protocol_dict['event']['job_ids']:
-                job = self._kill_requested_jobs.pop(job_id)
-                jobs.append(job)
-            protocol_dict['__pybatsim_jobs'] = jobs
+                assert job_id not in self._alive_jobs
+                job = self._zombie_jobs.pop(job_id)
+                dead_jobs.append(job)
+            protocol_dict['__pybatsim_dead_jobs'] = dead_jobs
 
         event = RxEvent.from_protocol_dict(protocol_dict)
 
         if isinstance(event, SimulationEndsEvent):
             self._received_SimulationEnds = True
+
         elif isinstance(event, JobSubmittedEvent):
-            # TODO: handle case where job is a dynamic job and Batsim is asked
-            # to acknowledge dynamic jobs
-            self._alive_jobs[event.job.job_id] = event.job
-        #elif isinstance(event, SimulationErrorEvent):
-        #   # TODO: Handle me and correctly terminate the EDC
+            # Batsim sends a full job description in a JobSubmittedEvent.
+            # The described job is either static or dynamic.
+            #   - in the former case, this is a new job: store it in _alive_jobs.
+            #   - in the latter case, retrieve the existing job and update in place.
+            new_job = event.job
+            job = self._alive_jobs.setdefault(new_job.job_id, new_job)
+
+            if job is not new_job:
+                # Dynamic jobs are submitted back by Batsim only if an
+                # acknowledgment is requested.
+                assert SimulationFeatures.ACKNOWLEDGE_DYNAMIC_JOBS in self.simulation_metadata.requested_features
+
+                # Update the existing dynamic job in place.
+                assert job.submission_time is None, "overwriting job.submission_time"
+                job.submission_time = new_job.submission_time
+
+                assert job.profile_dict is None, "overwriting job.profile_dict"
+                job.profile_dict = new_job.profile_dict
+
+                # Reuse the existing dynamic job in the deserialized event.
+                event.job = job
 
         return event
 
