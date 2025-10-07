@@ -4,6 +4,7 @@ import json
 import sys
 from abc import abstractmethod
 from collections import deque
+from collections.abc import Iterable
 from typing import Protocol, Self
 
 import zmq
@@ -13,7 +14,6 @@ from .events import (
     AllStaticExternalEventsHaveBeenInjectedEvent,
     AllStaticJobsHaveBeenSubmittedEvent,
     EDCHelloEvent,
-    Event,
     ExternalEventOccurredEvent,
     HostsPStateChangedEvent,
     HostsTurnedOnOffEvent,
@@ -228,7 +228,7 @@ class Batsim:
         self._zmq_socket.send(wire_msg)
         self._tx.clear()
 
-    def register_edc(self, edc) -> None:
+    def register_edc(self, edc: ExternalDecisionComponent) -> None:
         self._edc = edc
         # XXX:
         #   This sequence is fragile as it requires:
@@ -369,7 +369,7 @@ class Batsim:
 class ExternalDecisionComponent(Protocol):
     def __init__(self, batsim: Batsim, options=None): ...
 
-    def handle_msg(self, msg) -> None: ...
+    def handle_msg(self, msg: Iterable[RxEvent]) -> None: ...
 
     def finalize(self) -> None: ...
 
@@ -382,15 +382,12 @@ class Scheduler(ExternalDecisionComponent):
         self._batsim = batsim
         self._options = options
 
-    def handle_msg(self, msg) -> None:
+    def handle_msg(self, msg: Iterable[RxEvent]) -> None:
         for event in msg:
             self._dispatch(event)
 
-    def _dispatch(self, event: Event) -> None:  # noqa: PLR0912 (reason: dictated by design)
-        # We should not receive send-only events: this could be done better
-        # with differentiated base classes.
+    def _dispatch(self, event: RxEvent) -> None:
         match event:
-            # receive-only events
             case JobSubmittedEvent():
                 self.handle_submitted_job(event)
             case JobCompletedEvent():
@@ -413,18 +410,6 @@ class Scheduler(ExternalDecisionComponent):
                 self.handle_no_more_static_jobs(event)
             case AllStaticExternalEventsHaveBeenInjectedEvent():
                 self.handle_no_more_external_events(event)
-
-            # Unsupported receive events.
-            case RxEvent():
-                err_msg = f"Unsupported receive Event '{type(event).__name__}'"
-                raise TypeError(err_msg)
-
-            # Send-only events.
-            case TxEvent():
-                err_msg = f"Unexpected send-only Event '{type(event).__name__}'"
-                raise TypeError(err_msg)
-
-            # Catch-all for unknown events.
             case _:
                 err_msg = f"Unknown Event '{type(event).__name__}'"
                 raise TypeError(err_msg)
