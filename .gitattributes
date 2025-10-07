@@ -3,3 +3,7 @@
 .gitignore export-ignore
 .gitkeep export-ignore
 .mailmap export-ignore
+
+# GitLab configuration
+poetry.lock gitlab-generated
+flake.lock gitlab-generated

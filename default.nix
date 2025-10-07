@@ -4,6 +4,10 @@
   }) {}
 , pybatsim-core-base ? kapack.pybatsim-core
 , pybatsim-functional-base ? kapack.pybatsim-functional
+, unstablepkgs ? import (builtins.fetchTarball { # Required for poetry >= 2.0.0 (as of April 2025)
+    url = "https://github.com/nixos/nixpkgs/archive/b7ba7f9f45c5cd0d8625e9e217c28f8eb6a19a76.tar.gz";
+    sha256 = "0zc9608kkl7bkgl4w80nw06ddk5i9gv7cp34m63vpwj4mr7zk034";
+  }) {}
 }:
 
 let
@@ -81,13 +85,13 @@ let
     };
 
     # small shell to dev and test schedulers
-    dev-shell = pkgs.mkShell rec {
+    dev-shell = unstablepkgs.mkShell rec {
       buildInputs = [
-        pkgs.stdenv.cc.cc.lib
-        python3Packages.poetry
+        unstablepkgs.stdenv.cc.cc.lib
+        unstablepkgs.poetry
       ];
 
-      LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib";
+      LD_LIBRARY_PATH="${unstablepkgs.stdenv.cc.cc.lib}/lib";
     };
   };
 in

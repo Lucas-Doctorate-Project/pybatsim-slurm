@@ -1,765 +1,455 @@
-# from __future__ import print_function
-
-from enum import Enum
-from copy import deepcopy
+from __future__ import annotations
 
 import json
 import sys
+from abc import abstractmethod
+from collections import deque
+from collections.abc import Iterable
+from typing import Protocol, Self
 
-from .network import NetworkHandler
-
-from procset import ProcSet
 import zmq
-import logging
+
+from .core import SimulationFeatures, SimulationMetadata
+from .events import (
+    AllStaticExternalEventsHaveBeenInjectedEvent,
+    AllStaticJobsHaveBeenSubmittedEvent,
+    EDCHelloEvent,
+    ExternalEventOccurredEvent,
+    HostsPStateChangedEvent,
+    HostsTurnedOnOffEvent,
+    JobCompletedEvent,
+    JobsKilledEvent,
+    JobSubmittedEvent,
+    KillJobsEvent,
+    RegisterJobEvent,
+    RejectJobEvent,
+    RequestedCallEvent,
+    RxEvent,
+    SimulationBeginsEvent,
+    SimulationEndsEvent,
+    TxEvent,
+)
+from .job import Job, JobId
+
+# SERIALIZATION_FORMAT_BINARY = 1  # unsupported
+SERIALIZATION_FORMAT_JSON = 2
+
+WORKLOAD_JOB_SEPARATOR = '!'
+# ATTEMPT_JOB_SEPARATOR = '#'  # unsupported, used when resubmitting jobs
 
 
+# TODO: Implement public API to access SimulationMetadata
+class Batsim:
+    # Communication with the batsim process.
+    _endpoint: str
+    _timeout: int
+    _zmq_socket: zmq.Socket | None
 
-class Batsim(object):
+    # Decision logic, injected by the user.
+    _edc: ExternalDecisionComponent | None
 
-    WORKLOAD_JOB_SEPARATOR = "!"
-    ATTEMPT_JOB_SEPARATOR = "#"
-    WORKLOAD_JOB_SEPARATOR_REPLACEMENT = "%"
+    # Simulation-related attributes.
+    _time: float
+    _simulation_metadata: SimulationMetadata
+    _rx: deque[RxEvent]
+    _tx: deque[TxEvent]
 
-    def __init__(self, scheduler,
-                 network_endpoint,
-                 timeout,
-                 event_endpoint=None):
+    # XXX: This is fragile, we should rather track the state from the state-machine.
+    _received_SimulationEndsEvent: bool  # noqa: N815 (reason: use event name)
 
+    def __init__(self, *, endpoint: str, timeout: int | None = None):
+        self._endpoint = endpoint
+        self._timeout = -1 if timeout is None else timeout
+        self._zmq_socket = None
 
-        self.logger = logging.getLogger(__name__)
+        self._edc = None
 
-        self.running_simulation = False
-        self.network = NetworkHandler(network_endpoint, timeout=timeout)
-        self.network.bind()
+        self._time = 0.0
+        self._simulation_metadata = SimulationMetadata()
+        self._rx = deque()
+        self._tx = deque()
 
-        # event hendler is optional
-        self.event_publisher = None
-        if event_endpoint is not None:
-            self.event_publisher = NetworkHandler(event_endpoint, type=zmq.PUB)
-            self.event_publisher.bind()
+        self._received_SimulationEndsEvent = False
 
-        self.jobs = dict()
+        # Batsim protocol can either send a job id or a full job description.
+        # The Python API abstracts this away, and only works with Job.
+        # _alive_jobs and _zombie_jobs ensure each Job object lives at least as
+        # long as needed: an EDC may further extend a job's life.
+        # _zombie_jobs extends the life of jobs with a pending death acknowledgment.
+        #
+        # The state machine of jobs, as known by pybatsim, is summarized below.
+        # Initial states are drawn as rectangle with single lines.
+        # Final states are drawn as rectangles with double lines.
+        # Other states are drawn as dashed ovals.
+        #
+        # States are marked with A for jobs in _alive_jobs, Z for jobs in _zombie_jobs.
+        # In the 'declared' state, only dynamic jobs are known by pybatsim:
+        # static jobs are created when Batsim sends a JobSubmittedEvent.
+        #
+        # ┌────────────┐  ┌─────────────┐
+        # │ static job │  │ dynamic job │───────────┐
+        # └────────────┘  └─────────────┘           │
+        #        │               │                  │
+        #        │            ack &&           not(ack) &&
+        #        │        RegisterJob[tx]    RegisterJob[tx]
+        #        │               🠇                  │
+        #        │         ╭╌╌╌╌╌╌╌╌╌╌╮             │
+        #        └──╴ε╶───>╎ declared ╎             │
+        #                  ╎     A*   ╎             │
+        #                  ╰╌╌╌╌╌╌╌╌╌╌╯             │
+        #                        │                  │
+        #                 JobSubmitted[rx]          │
+        #                        🠇                  │
+        #                  ╭╌╌╌╌╌╌╌╌╌╌╌╮            │
+        #       ┌──────────╎ submitted ╎<───────────┘
+        #       │          ╎     A     ╎
+        #       │          ╰╌╌╌╌╌╌╌╌╌╌╌╯
+        #       │                │
+        # RejectJob[tx]    ExecuteJob[tx]
+        #       🠇                🠇
+        # ╔══════════╗      ╭╌╌╌╌╌╌╌╌╌╮                      ╭╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╮
+        # ║ rejected ║      ╎ running ╎────╴KillJob[tx]╶────>╎ running,kill_received ╎
+        # ╚══════════╝      ╎    A    ╎                      ╎          A,Z          ╎
+        #                   ╰╌╌╌╌╌╌╌╌╌╯                      ╰╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╯
+        #                        │                                       │
+        #                 JobCompleted[rx]                        JobCompleted[rx]
+        #                        🠇                                       🠇
+        #                 ╔═════════════╗                  ╭╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╮
+        #                 ║ completed_* ║──╴KillJob[tx]╶──>╎ completed_*,kill_received ╎
+        #                 ╚═════════════╝                  ╎             Z             ╎
+        #                                                  ╰╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╯
+        #                                                                │
+        #                                                         JobKillled[rx]
+        #                                                                🠇
+        #                                                   ╔════════════════════════╗
+        #                                                   ║ completed_*,kill_acked ║
+        #                                                   ╚════════════════════════╝
+        self._alive_jobs: dict[JobId, Job] = {}
+        self._zombie_jobs: dict[JobId, Job] = {}
 
-        sys.setrecursionlimit(10000)
+    def __setup_zmq(self) -> None:
+        context = zmq.Context()
+        context.setsockopt(zmq.RCVTIMEO, self._timeout)
 
-        self.scheduler = scheduler
+        self._zmq_socket = context.socket(socket_type=zmq.REP)
+        self._zmq_socket.bind(self._endpoint)
+        # Replace _endpoint with the actual endpoint in use (no wildcard).
+        self._endpoint = self._zmq_socket.getsockopt(zmq.LAST_ENDPOINT)
 
-        # initialize some public attributes
-        self.nb_jobs_submitted_from_batsim = 0
-        self.nb_jobs_submitted_from_scheduler = 0
-        self.nb_jobs_submitted = 0
-        self.nb_jobs_killed = 0
-        self.nb_jobs_rejected = 0
-        self.nb_jobs_scheduled = 0
-        self.nb_jobs_in_submission = 0
-        self.nb_jobs_completed = 0
-        self.nb_jobs_successful = 0
-        self.nb_jobs_failed = 0
-        self.nb_jobs_timeout = 0
+    def __teardown_zmq(self) -> None:
+        assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
+        self._zmq_socket.unbind(self._endpoint)
+        self._zmq_socket.close()
+        self._zmq_socket.context.destroy()
 
-        self.jobs_manually_changed = set()
+    def __enter__(self) -> Self:
+        self.__setup_zmq()  # connect to Batsim ØMQ socket
 
-        self.no_more_static_jobs = False
-        self.no_more_external_events = False
-        self.use_storage_controller = False
+        try:
+            # handle init message
+            self._recv_init_msg()
 
-        self.scheduler.bs = self
-        # import pdb; pdb.set_trace()
-        # Wait the "simulation starts" message to read the number of machines
-        self._read_bat_msg()
+        except Exception:  # XXX: consider reducing caught exceptions
+            self.__teardown_zmq()
+            raise
 
-        self.scheduler.onAfterBatsimInit()
-
-    def publish_event(self, event):
-        """Sends a message to subscribed event listeners (e.g. external processes which want to
-        observe the simulation).
-        """
-        if self.event_publisher is not None:
-            self.event_publisher.send_string(event)
-
-    def time(self):
-        return self._current_time
-
-    def consume_time(self, t):
-        self._current_time += float(t)
-        return self._current_time
-
-    def wake_me_up_at(self, time):
-        self._events_to_send.append(
-            {"timestamp": self.time(),
-             "type": "CALL_ME_LATER",
-             "data": {"timestamp": time}})
-
-    def notify_registration_finished(self):
-        self._events_to_send.append({
-            "timestamp": self.time(),
-            "type": "NOTIFY",
-            "data": {
-                    "type": "registration_finished",
-            }
-        })
-
-    def notify_registration_continue(self):
-        self._events_to_send.append({
-            "timestamp": self.time(),
-            "type": "NOTIFY",
-            "data": {
-                    "type": "continue_registration",
-            }
-        })
-
-    def send_message_to_job(self, job, message):
-        self._events_to_send.append({
-            "timestamp": self.time(),
-            "type": "TO_JOB_MSG",
-            "data": {
-                    "job_id": job.id,
-                    "msg": message,
-            }
-        })
-
-    def start_jobs(self, jobs, res):
-        """ DEPRECATED: please use execute_jobs instead """
-        """ args:res: is list of int (resources ids) """
-        for job in jobs:
-            self._events_to_send.append({
-                "timestamp": self.time(),
-                "type": "EXECUTE_JOB",
-                "data": {
-                        "job_id": job.id,
-                        "alloc": str(ProcSet(*res[job.id]))
-                }
-            }
-            )
-            self.nb_jobs_scheduled += 1
-
-    def execute_job(self, job, io_job = None):
-        """ ergs.job: Job to execute
-            job.allocation MUST be not None and should be a non-empty ProcSet
-        """
-        assert job.allocation is not None
-        message = {
-            "timestamp": self.time(),
-            "type": "EXECUTE_JOB",
-            "data": {
-                    "job_id": job.id,
-                    "alloc": str(job.allocation)
-            }
-        }
-
-        self.jobs[job.id].allocation = job.allocation
-        self.jobs[job.id].job_state = Job.State.RUNNING
-        self.jobs[job.id].starting_time = self.time()
-
-        if io_job is not None:
-            message["data"]["additional_io_job"] = io_job
-
-        if hasattr(job, "mapping"):
-            message["data"]["mapping"] = job.mapping
-            self.jobs[job.id].mapping = job.mapping
-
-        if hasattr(job, "storage_mapping"):
-            message["data"]["storage_mapping"] = job.storage_mapping
-            self.jobs[job.id].storage_mapping = job.storage_mapping
-
-        self.jobs[job.id].allocation = job.allocation
-
-        self._events_to_send.append(message)
-        self.nb_jobs_scheduled += 1
-
-    def execute_jobs(self, jobs, io_jobs=None):
-        """ args:jobs: list of jobs to execute
-            job.allocation MUST be not None and should be a non-empty ProcSet
-        """
-        for job in jobs:
-            if io_jobs is not None:
-                self.execute_job(job, io_jobs[job.id])
-            else:
-                self.execute_job(job)
-
-    def reject_jobs_by_id(self, job_ids):
-        """ Reject the given jobs."""
-        assert len(job_ids) > 0, "The list of jobs to reject is empty"
-        for job_id in job_ids:
-            self._events_to_send.append({
-                "timestamp": self.time(),
-                "type": "REJECT_JOB",
-                "data": {
-                    "job_id": job_id
-                }
-            })
-            self.jobs[job_id].job_state = Job.State.REJECTED
-        self.nb_jobs_rejected += len(job_ids)
-
-    def reject_jobs(self, jobs):
-        """Reject the given jobs."""
-        assert len(jobs) > 0, "The list of jobs to reject is empty"
-        job_ids = [x.id for x in jobs]
-        self.reject_jobs_by_id(job_ids)
-
-
-    def change_job_state(self, job, state):
-        """Change the state of a job."""
-        self._events_to_send.append({
-            "timestamp": self.time(),
-            "type": "CHANGE_JOB_STATE",
-            "data": {
-                    "job_id": job.id,
-                    "job_state": state.name,
-            }
-        })
-        self.jobs_manually_changed.add(job)
-
-    def kill_jobs(self, jobs):
-        """Kill the given jobs."""
-        assert len(jobs) > 0, "The list of jobs to kill is empty"
-        for job in jobs:
-            job.job_state = Job.State.IN_KILLING
-        self._events_to_send.append({
-            "timestamp": self.time(),
-            "type": "KILL_JOB",
-            "data": {
-                    "job_ids": [job.id for job in jobs],
-            }
-        })
-
-    def register_profiles(self, workload_name, profiles):
-        for profile_name, profile in profiles.items():
-            msg = {
-                "timestamp": self.time(),
-                "type": "REGISTER_PROFILE",
-                "data": {
-                    "workload_name": workload_name,
-                    "profile_name": profile_name,
-                    "profile": profile,
-                }
-            }
-            self._events_to_send.append(msg)
-            if not workload_name in self.profiles:
-                self.profiles[workload_name] = {}
-                self.logger.debug("A new dynamic workload of name '{}' has been created".format(workload_name))
-            self.logger.debug("Registering profile: {}".format(msg["data"]))
-            self.profiles[workload_name][profile_name] = profile
-
-    def register_job(
-            self,
-            id,
-            res,
-            walltime,
-            profile_name,
-            subtime=None):
-        """ Returns the registered Job """
-
-        if subtime is None:
-            subtime = self.time()
-        job_dict = {
-            "profile": profile_name,
-            "id": id,
-            "res": res,
-            "walltime": walltime,
-            "subtime": subtime,
-        }
-        msg = {
-            "timestamp": self.time(),
-            "type": "REGISTER_JOB",
-            "data": {
-                "job_id": id,
-                "job": job_dict,
-            }
-        }
-        self._events_to_send.append(msg)
-        job = Job.from_json_dict(job_dict)
-        job.job_state = Job.State.IN_SUBMISSON
-        
-        if self.ack_of_dynamic_jobs:
-            self.nb_jobs_in_submission += 1
         else:
-            self.nb_jobs_submitted += 1
-            self.nb_jobs_submitted_from_scheduler += 1
+            return self
 
-        # Keep a pointer of the profile in the job structure
-        assert job.profile in self.profiles[job.workload]
-        job.profile_dict = self.profiles[job.workload][job.profile]
-
-        self.jobs[id] = job
-        return job
-
-    def set_resource_state(self, resources, state):
-        """ args:resources: is a ProcSet containing a list of resources.
-            args:state: is a state identifier configured in the platform specification.
-        """
-
-        self._events_to_send.append({
-            "timestamp": self.time(),
-            "type": "SET_RESOURCE_STATE",
-            "data": {
-                    "resources": str(resources),
-                    "state": str(state)
-            }
-        })
-
-    def get_job_and_profile(self, event):
-        json_dict = event["data"]["job"]
-        job = Job.from_json_dict(json_dict)
-
-        if "profile" in event["data"]:
-            profile = event["data"]["profile"]
-        else:
-            profile = {}
-
-        return job, profile
-
-
-    def request_consumed_energy(self): #TODO CHANGE NAME
-        self._events_to_send.append(
-            {
-                "timestamp": self.time(),
-                "type": "QUERY",
-                "data": {
-                    "requests": {"consumed_energy": {}}
-                }
-            }
-        )
-
-    def notify_resources_added(self, resources):
-        self._events_to_send.append(
-            {
-                "timestamp": self.time(),
-                "type": "RESOURCES_ADDED",
-                "data": {
-                    "resources": str(resources)
-                }
-            }
-        )
-
-    def notify_resources_removed(self, resources):
-        self._events_to_send.append(
-            {
-                "timestamp": self.time(),
-                "type": "RESOURCES_REMOVED",
-                "data": {
-                    "resources": str(resources)
-                }
-            }
-        )
-
-    def set_job_metadata(self, job_id, metadata):
-        # Consume some time to be sure that the job was created before the
-        # metadata is set
-
-        self._events_to_send.append(
-            {
-                "timestamp": self.time(),
-                "type": "SET_JOB_METADATA",
-                "data": {
-                    "job_id": str(job_id),
-                    "metadata": str(metadata)
-                }
-            }
-        )
-        self.jobs[job_id].metadata = metadata
-
-
-    def resubmit_job(self, job):
-        """
-        The given job is resubmited but in a dynamic workload. The name of this
-        workload is "resubmit=N" where N is the number of resubmission.
-        The job metadata is filled with a dict that contains the original job
-        full id in "parent_job" and the number of resubmissions in "nb_resubmit".
-        """
-
-        if job.metadata is None:
-            metadata = {"parent_job": job.id, "nb_resubmit": 1}
-        else:
-            metadata = deepcopy(job.metadata)
-            if "nb_resubmit" not in metadata:
-                metadata["nb_resubmit"] = 1
-            else:
-                metadata["nb_resubmit"] = metadata["nb_resubmit"] + 1
-            if "parent_job" not in metadata:
-                metadata["parent_job"] = job.id
-
-        # Keep the current workload and add a resubmit number
-        splitted_id = job.id.split(Batsim.ATTEMPT_JOB_SEPARATOR)
-        if len(splitted_id) == 1:
-            new_job_name = deepcopy(job.id)
-        else:
-            # This job has already an attempt number
-            new_job_name = splitted_id[0]
-            assert splitted_id[1] == str(metadata["nb_resubmit"] - 1)
-        new_job_name =  new_job_name + Batsim.ATTEMPT_JOB_SEPARATOR + str(metadata["nb_resubmit"])
-        # log in job metadata parent job and nb resubmit
-
-        new_job = self.register_job(
-                new_job_name,
-                job.requested_resources,
-                job.requested_time,
-                job.profile)
-
-        self.set_job_metadata(new_job_name, metadata)
-        return new_job
-
-    def do_next_event(self):
-        return self._read_bat_msg()
-
-    def start(self):
-        cont = True
-        while cont:
-            cont = self.do_next_event()
-
-    def _read_bat_msg(self):
-        msg = None
-        while msg is None:
-            msg = self.network.recv(blocking=not self.running_simulation)
-            if msg is None:
-                self.scheduler.onDeadlock()
-                continue
-        self.logger.info("Message Received from Batsim: {}".format(msg))
-
-        self._current_time = msg["now"]
-
-        self._events_to_send = []
-
-        finished_received = False
-
-        self.scheduler.onBeforeEvents()
-
-        for event in msg["events"]:
-            event_type = event["type"]
-            event_data = event.get("data", {})
-            if event_type == "SIMULATION_BEGINS":
-                assert not self.running_simulation, "A simulation is already running (is more than one instance of Batsim active?!)"
-                self.running_simulation = True
-                self.nb_resources = event_data["nb_resources"]
-                self.nb_compute_resources = event_data["nb_compute_resources"]
-                self.nb_storage_resources = event_data["nb_storage_resources"]
-                compute_resources = event_data["compute_resources"]
-                storage_resources = event_data["storage_resources"]
-                self.machines = {"compute": compute_resources, "storage": storage_resources}
-                self.batconf = event_data["config"]
-                self.allow_compute_sharing = event_data["allow_compute_sharing"]
-                self.allow_storage_sharing = event_data["allow_storage_sharing"]
-                self.profiles_forwarded_on_submission = self.batconf["profiles-forwarded-on-submission"]
-                self.dynamic_job_registration_enabled = self.batconf["dynamic-jobs-enabled"]
-                self.ack_of_dynamic_jobs = self.batconf["dynamic-jobs-acknowledged"]
-                self.forward_unknown_events = self.batconf["forward-unknown-events"]
-
-                if self.dynamic_job_registration_enabled:
-                    self.logger.warning("Dynamic registration of jobs is ENABLED. The scheduler must send a NOTIFY event of type 'registration_finished' to let Batsim end the simulation.")
-
-                # Retro compatibility for old Batsim API > 1.0 < 3.0
-                if "resources_data" in event_data:
-                    res_key = "resources_data"
-                else:
-                    res_key = "compute_resources"
-                self.compute_resources = {
-                        res["id"]: res for res in event_data[res_key]}
-                self.storage_resources = {
-                        res["id"]: res for res in event_data["storage_resources"]}
-
-                self.profiles = event_data["profiles"]
-
-                self.workloads = event_data["workloads"]
-
-                self.scheduler.onSimulationBegins()
-
-            elif event_type == "SIMULATION_ENDS":
-                assert self.running_simulation, "No simulation is currently running"
-                self.running_simulation = False
-                self.logger.info("All jobs have been submitted and completed!")
-                finished_received = True
-                self.scheduler.onSimulationEnds()
-
-            elif event_type == "JOB_SUBMITTED":
-                # Received WORKLOAD_NAME!JOB_ID
-                job_id = event_data["job_id"]
-                job, profile = self.get_job_and_profile(event)
-                job.job_state = Job.State.SUBMITTED
-                self.nb_jobs_submitted += 1
-
-                # Store profile if not already present
-                if profile is not None:
-                    if job.workload not in self.profiles:
-                        self.profiles[job.workload] = {}
-                    if job.profile not in self.profiles[job.workload]:
-                        self.profiles[job.workload][job.profile] = profile
-
-                # Keep a pointer in the job structure
-                assert job.profile in self.profiles[job.workload]
-                job.profile_dict = self.profiles[job.workload][job.profile]
-
-                # Warning: override dynamic job but keep metadata
-                if job_id in self.jobs:
-                    self.logger.warn(
-                        "The job '{}' was alredy in the job list. "
-                        "Probaly a dynamic job that was submitted "
-                        "before: \nOld job: {}\nNew job: {}".format(
-                            job_id,
-                            self.jobs[job_id],
-                            job))
-                    if self.jobs[job_id].job_state == Job.State.IN_SUBMISSON:
-                        self.nb_jobs_in_submission = self.nb_jobs_in_submission - 1
-                    # Keeping metadata and profile
-                    job.metadata = self.jobs[job_id].metadata
-                    self.nb_jobs_submitted_from_scheduler += 1
-                else:
-                    # This was submitted from batsim
-                    self.nb_jobs_submitted_from_batsim += 1
-                self.jobs[job_id] = job
-
-                if (self.use_storage_controller) and (job.workload == "dyn-storage-controller"):
-                    # This job comes from the StorageController, it' just an ack so forget about it
-                    pass
-                else:
-                    self.scheduler.onJobSubmission(job)
-
-            elif event_type == "JOB_KILLED":
-                # get progress
-                killed_jobs = []
-                for jid in event_data["job_ids"]:
-                    j = self.jobs[jid]
-                    # The job_progress can only be empty if the job has completed
-                    # between the order of killing and the killing itself.
-                    # So in that case just dont put it in the killed jobs
-                    # because it was already mark as complete.
-                    if len(event_data["job_progress"]) != 0:
-                        j.progress = event_data["job_progress"][jid]
-                        killed_jobs.append(j)
-                if len(killed_jobs) != 0:
-                    self.scheduler.onJobsKilled(killed_jobs)
-
-            elif event_type == "JOB_COMPLETED":
-                job_id = event_data["job_id"]
-                j = self.jobs[job_id]
-                j.finish_time = event["timestamp"]
-
-                try:
-                    j.job_state = Job.State[event["data"]["job_state"]]
-                except KeyError:
-                    j.job_state = Job.State.UNKNOWN
-                j.return_code = event["data"]["return_code"]
-
-                if j.job_state == Job.State.COMPLETED_WALLTIME_REACHED:
-                    self.nb_jobs_timeout += 1
-                elif j.job_state == Job.State.COMPLETED_FAILED:
-                    self.nb_jobs_failed += 1
-                elif j.job_state == Job.State.COMPLETED_SUCCESSFULLY:
-                    self.nb_jobs_successful += 1
-                elif j.job_state == Job.State.COMPLETED_KILLED:
-                    self.nb_jobs_killed += 1
-                self.nb_jobs_completed += 1
-
-                if (self.use_storage_controller) and (j.workload == "dyn-storage-controller"):
-                    # This job comes from the Storage Controller
-                    self.storage_controller.data_staging_completed(j)
-                else:
-                    self.scheduler.onJobCompletion(j)
-
-            elif event_type == "FROM_JOB_MSG":
-                job_id = event_data["job_id"]
-                j = self.jobs[job_id]
-                timestamp = event["timestamp"]
-                msg = event_data["msg"]
-                self.scheduler.onJobMessage(timestamp, j, msg)
-
-            elif event_type == "RESOURCE_STATE_CHANGED":
-                machines = ProcSet.from_str(event_data["resources"])
-                self.scheduler.onMachinePStateChanged(machines, int(event_data["state"]))
-
-            elif event_type == "ANSWER":
-                if "consumed_energy" in event_data:
-                    consumed_energy = event_data["consumed_energy"]
-                    self.scheduler.onReportEnergyConsumed(consumed_energy)
-
-            elif event_type == 'REQUESTED_CALL':
-                self.scheduler.onRequestedCall()
-
-            elif event_type == 'ADD_RESOURCES':
-                self.scheduler.onAddResources(ProcSet.from_str(event_data["resources"]))
-
-            elif event_type == 'REMOVE_RESOURCES':
-                self.scheduler.onRemoveResources(ProcSet.from_str(event_data["resources"]))
-
-            elif event_type == "NOTIFY":
-                notify_type = event_data["type"]
-                if notify_type == "no_more_static_job_to_submit":
-                    self.no_more_static_jobs = True
-                    self.scheduler.onNoMoreJobsInWorkloads()
-                elif notify_type == "no_more_external_event_to_occur":
-                    self.no_more_external_events = True
-                    self.scheduler.onNoMoreExternalEvents()
-                elif notify_type == "event_machine_unavailable":
-                    self.scheduler.onNotifyEventMachineUnavailable(ProcSet.from_str(event_data["resources"]))
-                elif notify_type == "event_machine_available":
-                    self.scheduler.onNotifyEventMachineAvailable(ProcSet.from_str(event_data["resources"]))
-                elif self.forward_unknown_events:
-                    self.scheduler.onNotifyGenericEvent(event_data)
-                else:
-                    raise Exception("Unknown NOTIFY type {}".format(notify_type))
-            else:
-                raise Exception("Unknown event type {}".format(event_type))
-
-        self.scheduler.onNoMoreEvents()
-
-        if len(self._events_to_send) > 0:
-            # sort msgs by timestamp
-            self._events_to_send = sorted(
-                self._events_to_send, key=lambda event: event['timestamp'])
-
-        new_msg = {
-            "now": self._current_time,
-            "events": self._events_to_send
-        }
-        self.network.send(new_msg)
-        self.logger.info("Message Sent to Batsim: {}".format(new_msg))
-
-
-        if finished_received:
-            self.network.close()
-            if self.event_publisher is not None:
-                self.event_publisher.close()
-
-        return not finished_received
-
-class Job(object):
-
-    class State(Enum):
-        UNKNOWN = -1
-        IN_SUBMISSON = 0
-        SUBMITTED = 1
-        RUNNING = 2
-        COMPLETED_SUCCESSFULLY = 3
-        COMPLETED_FAILED = 4
-        COMPLETED_WALLTIME_REACHED = 5
-        COMPLETED_KILLED = 6
-        REJECTED = 7
-        IN_KILLING = 8
-
-    def __init__(
-            self,
-            id,
-            subtime,
-            walltime,
-            res,
-            profile,
-            json_dict):
-        self.id = id
-        self.submit_time = subtime
-        self.requested_time = walltime
-        self.requested_resources = res
-        self.profile = profile
-        self.starting_time = None  # will be set when calling BatsimScheduler.execute_job
-        self.finish_time = None  # will be set on completion by batsim
-        self.job_state = Job.State.UNKNOWN
-        self.return_code = None
-        self.progress = None
-        self.json_dict = json_dict
-        self.profile_dict = None
-        self.allocation = None
-        self.metadata = None
-
-    def __repr__(self):
-        return(
-            ("{{Job {0}; sub:{1} res:{2} reqtime:{3} prof:{4} "
-                "state:{5} ret:{6} alloc:{7}, meta:{8}}}\n").format(
-            self.id, self.submit_time, self.requested_resources,
-            self.requested_time, self.profile,
-            self.job_state,
-            self.return_code, self.allocation, self.metadata))
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.__teardown_zmq()  # always clean the Batsim ØMQ resources (context/socket)
+        return False  # always propagate exceptions occurring in the with block
 
     @property
-    def workload(self):
-        return self.id.split(Batsim.WORKLOAD_JOB_SEPARATOR)[0]
+    def connected(self) -> bool:
+        return self._zmq_socket is not None and not self._zmq_socket.closed
 
-    @staticmethod
-    def from_json_string(json_str):
-        json_dict = json.loads(json_str)
-        return Job.from_json_dict(json_dict)
+    @property
+    def time(self) -> float:
+        return self._time
 
-    @staticmethod
-    def from_json_dict(json_dict):
-        return Job(json_dict["id"],
-                   json_dict["subtime"],
-                   json_dict.get("walltime", -1),
-                   json_dict["res"],
-                   json_dict["profile"],
-                   json_dict)
-    # def __eq__(self, other):
-        # return self.id == other.id
-    # def __ne__(self, other):
-        # return not self.__eq__(other)
+    def consume_time(self, time: float) -> None:
+        assert time > 0, 'cannot go back in time'
+        self._time += time
+
+    @property
+    def simulation_metadata(self) -> SimulationMetadata:
+        return self._simulation_metadata
+
+    def _recv_init_msg(self) -> None:
+        # Batsim sends the first message (init message)
+        # message format:
+        # 1. init_data_size(uint32)
+        # 2. init_data(init_data_size bytes):
+        #    EDC initialization string forwarded from Batsim CLI
+        assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
+
+        raw_msg: bytes = self._zmq_socket.recv()
+        assert raw_msg is not None, 'invalid init message'
+
+        data_size = int.from_bytes(raw_msg[:4], byteorder=sys.byteorder)
+        data: bytes = raw_msg[4:]
+        if len(raw_msg) != 4 + data_size:
+            err_msg = (
+                'invalid data_size: '
+                f'received init message is {len(raw_msg)} bytes long, '
+                f'read data is {data_size} bytes long (should be 4 bytes less)'
+            )
+            raise ValueError(err_msg)
+
+        self._simulation_metadata.edc_init_str = data[:data_size].decode('utf-8')
+
+    def _send_edc_hello_msg(self) -> None:
+        # Prepare and send the first EDC message (answer to the init message)
+        # message format:
+        # 1. serialization_format(uint32)
+        # 2. serialized message with the EDCHelloEvent
+        assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
+
+        # Check _tx buffer contains a single event of type EDCHelloEvent.
+        if not isinstance(self._tx[0], EDCHelloEvent):
+            err_msg = (
+                f"EDC asked to send '{type(self._tx[0]).__name__}', "
+                "expected 'EDCHelloEvent'"
+            )
+            raise TypeError(err_msg)
+        if len(self._tx) != 1:
+            err_msg = "EDC hello message must contain a single 'EDCHelloEvent'"
+            raise ValueError(err_msg)
+
+        # Build sequence of bytes to send.
+        serialization_format: bytes = SERIALIZATION_FORMAT_JSON.to_bytes(
+            4, byteorder='little'
+        )
+        protocol_dict: dict = self.serialize_msg()
+        raw_msg: str = json.dumps(protocol_dict)
+        wire_msg: bytes = serialization_format + raw_msg.encode()
+
+        self._zmq_socket.send(wire_msg)
+        self._tx.clear()
+
+    def register_edc(self, edc: ExternalDecisionComponent) -> None:
+        self._edc = edc
+        # XXX:
+        #   This sequence is fragile as it requires:
+        #   1. the EDC to append the hello event during its initialization
+        #   2. no other creation of messages before registering
+        #
+        #   Consider introducing a required method craft_hello_event on
+        #   ExternalDecisionComponent.
+        self._send_edc_hello_msg()
+
+    def is_simulation_finished(self) -> bool:
+        return self._received_SimulationEndsEvent
+
+    def recv_msg(self) -> None:
+        assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
+
+        try:
+            raw_msg = self._zmq_socket.recv_string()
+            # XXX: https://framagit.org/batsim/batprotocol/-/issues/3
+            #   The batprotocol appends a null byte after each sent JSON message.
+            #   Consider removing the null byte from the protocol as ØMQ handles
+            #   the length of sent messages.
+            #   This would allow to use self._zmq_socket.recv_json()
+            protocol_dict = json.loads(raw_msg[:-1])  # drop terminating null byte
+            print(f'Received Batsim message: {protocol_dict}')
+            self.deserialize_msg(protocol_dict)
+
+        except Exception:  # noqa: TRY203 (reason: due to the TODO on the next line)
+            # TODO: handle json.loads and deserialization exceptions
+            raise
+
+    def dispatch_msg(self) -> None:
+        """Trigger handling of the received message by the registered EDC."""
+        assert self._edc is not None, 'uninitialized _edc'
+        self._edc.handle_msg(self._rx)
+
+    def send_msg(self) -> None:
+        """Send the built answer message to Batsim."""
+        protocol_dict = self.serialize_msg()
+        print(f'Sending to Batsim:\n{protocol_dict}')
+        self._zmq_socket.send_json(protocol_dict)
+        self._tx.clear()
+
+    def pop_event(self) -> RxEvent:
+        return self._rx.popleft()
+
+    def append_event(self, event: TxEvent) -> None:
+        """Add event to the next message for Batsim."""
+        if isinstance(event, RejectJobEvent):
+            # Remove from _alive_jobs as RejectJobEvent is the last possible
+            # event sent to Batsim.
+            assert event.job.job_id not in self._zombie_jobs
+            del self._alive_jobs[event.job.job_id]
+
+        elif isinstance(event, KillJobsEvent):
+            # Extend lifetime of of jobs until we receive their death acknowledgment.
+            for job in event.jobs:
+                self._zombie_jobs[job.job_id] = job
+
+        elif isinstance(event, RegisterJobEvent):
+            # event.job is a dynamic job created by the EDC: keep track of it.
+            assert event.job.job_id not in self._alive_jobs
+            self._alive_jobs[event.job.job_id] = event.job
+
+        self._tx.append(event)
+
+    def deserialize_event(self, protocol_dict) -> RxEvent:
+        # For events only containing a job id, retrieve the corresponding Job
+        # object from _alive_jobs and inject it in protocol_dict.
+        # This allows RxEvent.from_protocol_dict to work with the correct objet.
+        if protocol_dict['event_type'] == 'JobCompletedEvent':
+            # Remove job from _alive_jobs as this is the last related event
+            # received from Batsim.
+            # The job may still be present in _zombie_jobs.
+            job = self._alive_jobs.pop(protocol_dict['event']['job_id'])
+            protocol_dict['__pybatsim_job'] = job
+
+        elif protocol_dict['event_type'] == 'JobsKilledEvent':
+            dead_jobs = []
+            for job_id in protocol_dict['event']['job_ids']:
+                assert job_id not in self._alive_jobs
+                job = self._zombie_jobs.pop(job_id)
+                dead_jobs.append(job)
+            protocol_dict['__pybatsim_dead_jobs'] = dead_jobs
+
+        event = RxEvent.from_protocol_dict(protocol_dict)
+
+        if isinstance(event, SimulationEndsEvent):
+            self._received_SimulationEndsEvent = True
+
+        elif isinstance(event, JobSubmittedEvent):
+            # Batsim sends a full job description in a JobSubmittedEvent.
+            # The described job is either static or dynamic.
+            #   - in the former case, this is a new job: store it in _alive_jobs.
+            #   - in the latter case, retrieve the existing job and update in place.
+            new_job = event.job
+            job = self._alive_jobs.setdefault(new_job.job_id, new_job)
+
+            if job is not new_job:
+                # Dynamic jobs are submitted back by Batsim only if an
+                # acknowledgment is requested.
+                assert (
+                    SimulationFeatures.ACKNOWLEDGE_DYNAMIC_JOBS
+                    in self.simulation_metadata.requested_features
+                )
+
+                # Update the existing dynamic job in place.
+                assert job.submission_time is None, 'overwriting job.submission_time'
+                job.submission_time = new_job.submission_time
+
+                assert job.profile_dict is None, 'overwriting job.profile_dict'
+                job.profile_dict = new_job.profile_dict
+
+                # Reuse the existing dynamic job in the deserialized event.
+                event.job = job
+
+        return event
+
+    def deserialize_msg(self, protocol_dict) -> None:
+        self._rx.clear()  # drop previous msg
+
+        assert self._time <= protocol_dict['now'], 'decreasing simulation time'
+        self._time = protocol_dict['now']
+
+        # Fill _rx buffer with the events received in current msg.
+        for event_dict in protocol_dict['events']:
+            print('--- Received event of type', event_dict['event_type'])
+            event = self.deserialize_event(event_dict)
+            self._rx.append(event)
+
+    def serialize_msg(self) -> dict:
+        return {
+            'now': self._time,
+            'events': [event.to_protocol_dict() for event in self._tx],
+        }
 
 
-class BatsimScheduler(object):
+class ExternalDecisionComponent(Protocol):
+    def __init__(self, batsim: Batsim, options=None): ...
 
-    def __init__(self, options = {}):
-        self.options = options
-        self.logger = logging.getLogger(__name__)
+    def handle_msg(self, msg: Iterable[RxEvent]) -> None: ...
 
-    def onAfterBatsimInit(self):
-        # You now have access to self.bs and all other functions
+    def finalize(self) -> None: ...
+
+
+class Scheduler(ExternalDecisionComponent):
+    _batsim: Batsim
+    _options: str | None
+
+    def __init__(self, batsim: Batsim, options: str | None = None):
+        self._batsim = batsim
+        self._options = options
+
+    def handle_msg(self, msg: Iterable[RxEvent]) -> None:
+        for event in msg:
+            self._dispatch(event)
+
+    def _dispatch(self, event: RxEvent) -> None:
+        match event:
+            case JobSubmittedEvent():
+                self.handle_submitted_job(event)
+            case JobCompletedEvent():
+                self.handle_completed_job(event)
+            case JobsKilledEvent():
+                self.handle_jobs_killed(event)
+            case RequestedCallEvent():
+                self.handle_requested_call(event)
+            case ExternalEventOccurredEvent():
+                self.handle_external_event_occurred(event)
+            case HostsPStateChangedEvent():
+                self.handle_hosts_pstate_changed(event)
+            case HostsTurnedOnOffEvent():
+                self.handle_hosts_turned_onoff(event)
+            case SimulationBeginsEvent():
+                self.handle_simulation_begins(event)
+            case SimulationEndsEvent():
+                self.handle_simulation_ends(event)
+            case AllStaticJobsHaveBeenSubmittedEvent():
+                self.handle_no_more_static_jobs(event)
+            case AllStaticExternalEventsHaveBeenInjectedEvent():
+                self.handle_no_more_external_events(event)
+            case _:
+                err_msg = f"Unknown Event '{type(event).__name__}'"
+                raise TypeError(err_msg)
+
+    @abstractmethod
+    def handle_simulation_begins(self, event: SimulationBeginsEvent) -> None: ...
+
+    @abstractmethod
+    def handle_simulation_ends(self, event: SimulationEndsEvent) -> None: ...
+
+    @abstractmethod
+    def handle_submitted_job(self, event: JobSubmittedEvent) -> None: ...
+
+    @abstractmethod
+    def handle_completed_job(self, event: JobCompletedEvent) -> None: ...
+
+    def handle_jobs_killed(self, event: JobsKilledEvent) -> None:
         pass
 
-    def onSimulationBegins(self):
+    def handle_external_event_occurred(self, event: ExternalEventOccurredEvent) -> None:
         pass
 
-    def onSimulationEnds(self):
+    def handle_hosts_pstate_changed(self, event: HostsPStateChangedEvent) -> None:
         pass
 
-    def onDeadlock(self):
-        raise ValueError(
-            "[PYBATSIM]: Batsim is not responding (maybe deadlocked)")
-
-    def onJobSubmission(self, job):
-        raise NotImplementedError()
-
-    def onJobCompletion(self, job):
-        raise NotImplementedError()
-
-    def onJobMessage(self, timestamp, job, message):
-        raise NotImplementedError()
-
-    def onJobsKilled(self, jobs):
-        raise NotImplementedError()
-
-    def onMachinePStateChanged(self, machines, pstate):
-        raise NotImplementedError()
-
-    def onReportEnergyConsumed(self, consumed_energy):
-        raise NotImplementedError()
-
-    def onAddResources(self, to_add):
-        raise NotImplementedError()
-
-    def onRemoveResources(self, to_remove):
-        raise NotImplementedError()
-
-    def onRequestedCall(self):
-        raise NotImplementedError()
-
-    def onNoMoreJobsInWorkloads(self):
-        self.logger.info("There is no more static jobs in the workload")
-
-    def onNoMoreExternalEvents(self):
-        self.logger.info("There is no more external events to occur")
-
-    def onNotifyEventMachineUnavailable(self, machines):
-        raise NotImplementedError()
-
-    def onNotifyEventMachineAvailable(self, machines):
-        raise NotImplementedError()
-
-    def onNotifyGenericEvent(self, event_data):
-        raise NotImplementedError()
-
-    def onDatasetArrivedOnStorage(self, dataset_id, source_id, dest_id): # Called by the Storage Controller, if any
-        raise NotImplementedError()
-
-    def onDataTransferNotTerminated(self, dataset_id, source_id, dest_id): # Called by the Storage Controller, if any
-        raise NotImplementedError()
-
-    def onBeforeEvents(self):
+    def handle_hosts_turned_onoff(self, event: HostsTurnedOnOffEvent) -> None:
         pass
 
-    def onNoMoreEvents(self):
+    def handle_requested_call(self, event: RequestedCallEvent) -> None:
+        pass
+
+    def handle_no_more_static_jobs(
+        self, event: AllStaticJobsHaveBeenSubmittedEvent
+    ) -> None:
+        pass
+
+    def handle_no_more_external_events(
+        self, event: AllStaticExternalEventsHaveBeenInjectedEvent
+    ) -> None:
+        pass
+
+    def finalize(self):
         pass
