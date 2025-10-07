@@ -4,8 +4,8 @@
     inputs = {
         nixpkgs.url = "github:nixos/nixpkgs?ref=25.05";
         batsim-batprotocol = {
-            # pin batprotocol branch and commit until it is merged in master
-            url = "git+https://framagit.org/batsim/batsim?ref=batprotocol&rev=5c80eccb37fb0162d3271d6ae47e97bb3f77dd71";
+            # follow batprotocol branch until it is merged in master
+            url = "git+https://framagit.org/batsim/batsim?ref=batprotocol";
             inputs.nixpkgs.follows = "nixpkgs";
         };
     };

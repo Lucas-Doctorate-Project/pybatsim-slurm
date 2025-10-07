@@ -33,7 +33,8 @@ class _JsonStoreAction(argparse.Action):
 
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
         if nargs is not None:
-            raise ValueError('nargs is not allowed')
+            err_msg = 'nargs is not allowed'
+            raise ValueError(err_msg)
         super().__init__(option_strings, dest, **kwargs)
 
     def __call__(self, _parser, namespace, values, _option_string=None):
@@ -42,7 +43,7 @@ class _JsonStoreAction(argparse.Action):
 
             if rawcontent.startswith('@'):
                 # classic text stream of the file containing the options
-                json_file = open(rawcontent[1:], mode='rt', encoding='utf-8')
+                json_file = open(rawcontent[1:], encoding='utf-8')  # noqa: SIM115 (reason: false positive)
             else:
                 # encapsulate the whole JSON string in a text stream
                 json_file = io.StringIO(rawcontent)

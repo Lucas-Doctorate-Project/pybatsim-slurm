@@ -6,7 +6,7 @@ import pytest
 from pybatsim import cmdline
 
 
-def dict_parametrize(argnames, paramsdict, indirect=False, scope=None):
+def dict_parametrize(argnames, paramsdict, indirect=False, scope=None):  # noqa: FBT002 (reason: prototype defined by pytest)
     """Decorator to parametrize test functions from a (id, argvalue) dict."""
     # zip ensures id matches its argvalue
     ids, argvalues = zip(*paramsdict.items(), strict=True)
@@ -66,7 +66,7 @@ class TestArgumentsParsing:
     )
     def test_unknown_arguments(self, parser, capsys, args):
         with pytest.raises(SystemExit) as excinfo:
-            parser.parse_args(args + ['random'])
+            parser.parse_args([*args, 'random'])
         assert excinfo.value.code == self.PARSING_ERROR_RETURN_CODE
         stderr = capsys.readouterr().err
         assert ': error: unrecognized arguments:' in stderr
@@ -80,7 +80,7 @@ class TestArgumentsParsing:
     )
     def test_deprecated_arguments(self, parser, capsys, args):
         with pytest.raises(SystemExit) as excinfo:
-            parser.parse_args(args + ['random'])
+            parser.parse_args([*args, 'random'])
         assert excinfo.value.code == self.PARSING_ERROR_RETURN_CODE
         stderr = capsys.readouterr().err
         assert ': error: unrecognized arguments:' in stderr
@@ -152,7 +152,7 @@ class TestArgumentsParsing:
         assert excinfo.value.code == self.PARSING_ERROR_RETURN_CODE
         stderr = capsys.readouterr().err
         assert (
-            ": error: argument -o/--edc-options: unable to read 'non-existant.json': no such file or directory"
+            ": error: argument -o/--edc-options: unable to read 'non-existant.json': no such file or directory"  # noqa: E501 (reason: grepability)
             in stderr
         )
 
@@ -175,4 +175,4 @@ class TestArgumentsParsing:
         args = ' '.join(combination)
         args = args.format(dir=scheduler_options_dir)  # inject path
         args = args.split()  # basic tokenization
-        parser.parse_args(args + ['random'])
+        parser.parse_args([*args, 'random'])

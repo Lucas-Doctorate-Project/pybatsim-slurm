@@ -2,60 +2,147 @@ from __future__ import annotations
 
 import json
 import sys
+from abc import abstractmethod
 from collections import deque
+from collections.abc import Iterable
+from typing import Protocol, Self
 
 import zmq
 
-from .core import SimulationMetadata
+from .core import SimulationFeatures, SimulationMetadata
 from .events import (
+    AllStaticExternalEventsHaveBeenInjectedEvent,
+    AllStaticJobsHaveBeenSubmittedEvent,
     EDCHelloEvent,
+    ExternalEventOccurredEvent,
+    HostsPStateChangedEvent,
+    HostsTurnedOnOffEvent,
+    JobCompletedEvent,
+    JobsKilledEvent,
     JobSubmittedEvent,
+    KillJobsEvent,
+    RegisterJobEvent,
     RejectJobEvent,
+    RequestedCallEvent,
     RxEvent,
+    SimulationBeginsEvent,
     SimulationEndsEvent,
     TxEvent,
 )
-from .job import Job
+from .job import Job, JobId
+
+# SERIALIZATION_FORMAT_BINARY = 1  # unsupported
+SERIALIZATION_FORMAT_JSON = 2
+
+WORKLOAD_JOB_SEPARATOR = '!'
+# ATTEMPT_JOB_SEPARATOR = '#'  # unsupported, used when resubmitting jobs
 
 
 # TODO: Implement public API to access SimulationMetadata
 class Batsim:
-    # SERIALIZATION_FORMAT_BINARY = 1  # unsupported
-    SERIALIZATION_FORMAT_JSON = 2
+    # Communication with the batsim process.
+    _endpoint: str
+    _timeout: int
+    _zmq_socket: zmq.Socket | None
 
-    WORKLOAD_JOB_SEPARATOR = '!'
-    # ATTEMPT_JOB_SEPARATOR = "#" # Used when resubmitting job
+    # Decision logic, injected by the user.
+    _edc: ExternalDecisionComponent | None
+
+    # Simulation-related attributes.
+    _time: float
+    _simulation_metadata: SimulationMetadata
+    _rx: deque[RxEvent]
+    _tx: deque[TxEvent]
+
+    # XXX: This is fragile, we should rather track the state from the state-machine.
+    _received_SimulationEndsEvent: bool  # noqa: N815 (reason: use event name)
 
     def __init__(self, *, endpoint: str, timeout: int | None = None):
-        self._endpoint: str = endpoint
-        self._timeout: int = -1 if timeout is None else timeout
-        self._zmq_socket: zmq.Socket | None = None
+        self._endpoint = endpoint
+        self._timeout = -1 if timeout is None else timeout
+        self._zmq_socket = None
 
         self._edc = None
 
-        self._time = 0
-        self._simulation_metadata: SimulationMetadata = SimulationMetadata()
-        self._rx: deque[RxEvent] = deque()
-        self._tx: deque[TxEvent] = deque()
+        self._time = 0.0
+        self._simulation_metadata = SimulationMetadata()
+        self._rx = deque()
+        self._tx = deque()
 
-        self._received_SimulationEnds: bool = False
-        self._alive_jobs: dict[str, Job] = {}
+        self._received_SimulationEndsEvent = False
 
-    def __setup_zmq(self):
+        # Batsim protocol can either send a job id or a full job description.
+        # The Python API abstracts this away, and only works with Job.
+        # _alive_jobs and _zombie_jobs ensure each Job object lives at least as
+        # long as needed: an EDC may further extend a job's life.
+        # _zombie_jobs extends the life of jobs with a pending death acknowledgment.
+        #
+        # The state machine of jobs, as known by pybatsim, is summarized below.
+        # Initial states are drawn as rectangle with single lines.
+        # Final states are drawn as rectangles with double lines.
+        # Other states are drawn as dashed ovals.
+        #
+        # States are marked with A for jobs in _alive_jobs, Z for jobs in _zombie_jobs.
+        # In the 'declared' state, only dynamic jobs are known by pybatsim:
+        # static jobs are created when Batsim sends a JobSubmittedEvent.
+        #
+        # ┌────────────┐  ┌─────────────┐
+        # │ static job │  │ dynamic job │───────────┐
+        # └────────────┘  └─────────────┘           │
+        #        │               │                  │
+        #        │            ack &&           not(ack) &&
+        #        │        RegisterJob[tx]    RegisterJob[tx]
+        #        │               🠇                  │
+        #        │         ╭╌╌╌╌╌╌╌╌╌╌╮             │
+        #        └──╴ε╶───>╎ declared ╎             │
+        #                  ╎     A*   ╎             │
+        #                  ╰╌╌╌╌╌╌╌╌╌╌╯             │
+        #                        │                  │
+        #                 JobSubmitted[rx]          │
+        #                        🠇                  │
+        #                  ╭╌╌╌╌╌╌╌╌╌╌╌╮            │
+        #       ┌──────────╎ submitted ╎<───────────┘
+        #       │          ╎     A     ╎
+        #       │          ╰╌╌╌╌╌╌╌╌╌╌╌╯
+        #       │                │
+        # RejectJob[tx]    ExecuteJob[tx]
+        #       🠇                🠇
+        # ╔══════════╗      ╭╌╌╌╌╌╌╌╌╌╮                      ╭╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╮
+        # ║ rejected ║      ╎ running ╎────╴KillJob[tx]╶────>╎ running,kill_received ╎
+        # ╚══════════╝      ╎    A    ╎                      ╎          A,Z          ╎
+        #                   ╰╌╌╌╌╌╌╌╌╌╯                      ╰╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╯
+        #                        │                                       │
+        #                 JobCompleted[rx]                        JobCompleted[rx]
+        #                        🠇                                       🠇
+        #                 ╔═════════════╗                  ╭╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╮
+        #                 ║ completed_* ║──╴KillJob[tx]╶──>╎ completed_*,kill_received ╎
+        #                 ╚═════════════╝                  ╎             Z             ╎
+        #                                                  ╰╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╯
+        #                                                                │
+        #                                                         JobKillled[rx]
+        #                                                                🠇
+        #                                                   ╔════════════════════════╗
+        #                                                   ║ completed_*,kill_acked ║
+        #                                                   ╚════════════════════════╝
+        self._alive_jobs: dict[JobId, Job] = {}
+        self._zombie_jobs: dict[JobId, Job] = {}
+
+    def __setup_zmq(self) -> None:
         context = zmq.Context()
         context.setsockopt(zmq.RCVTIMEO, self._timeout)
 
         self._zmq_socket = context.socket(socket_type=zmq.REP)
         self._zmq_socket.bind(self._endpoint)
-        # replace _endpoint with the actual endpoint in use (no wildcard)
+        # Replace _endpoint with the actual endpoint in use (no wildcard).
         self._endpoint = self._zmq_socket.getsockopt(zmq.LAST_ENDPOINT)
 
-    def __teardown_zmq(self):
+    def __teardown_zmq(self) -> None:
+        assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
         self._zmq_socket.unbind(self._endpoint)
         self._zmq_socket.close()
         self._zmq_socket.context.destroy()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         self.__setup_zmq()  # connect to Batsim ØMQ socket
 
         try:
@@ -78,11 +165,15 @@ class Batsim:
         return self._zmq_socket is not None and not self._zmq_socket.closed
 
     @property
-    def time(self):
+    def time(self) -> float:
         return self._time
 
+    def consume_time(self, time: float) -> None:
+        assert time > 0, 'cannot go back in time'
+        self._time += time
+
     @property
-    def simulation_metadata(self):
+    def simulation_metadata(self) -> SimulationMetadata:
         return self._simulation_metadata
 
     def _recv_init_msg(self) -> None:
@@ -109,13 +200,13 @@ class Batsim:
         self._simulation_metadata.edc_init_str = data[:data_size].decode('utf-8')
 
     def _send_edc_hello_msg(self) -> None:
-        # prepare and send the first EDC message (answer to the init message)
+        # Prepare and send the first EDC message (answer to the init message)
         # message format:
         # 1. serialization_format(uint32)
         # 2. serialized message with the EDCHelloEvent
         assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
 
-        # check _tx buffer contains a single event of type EDCHelloEvent
+        # Check _tx buffer contains a single event of type EDCHelloEvent.
         if not isinstance(self._tx[0], EDCHelloEvent):
             err_msg = (
                 f"EDC asked to send '{type(self._tx[0]).__name__}', "
@@ -126,8 +217,8 @@ class Batsim:
             err_msg = "EDC hello message must contain a single 'EDCHelloEvent'"
             raise ValueError(err_msg)
 
-        # build sequence of bytes to send
-        serialization_format: bytes = self.SERIALIZATION_FORMAT_JSON.to_bytes(
+        # Build sequence of bytes to send.
+        serialization_format: bytes = SERIALIZATION_FORMAT_JSON.to_bytes(
             4, byteorder='little'
         )
         protocol_dict: dict = self.serialize_msg()
@@ -137,7 +228,7 @@ class Batsim:
         self._zmq_socket.send(wire_msg)
         self._tx.clear()
 
-    def register_edc(self, edc) -> None:
+    def register_edc(self, edc: ExternalDecisionComponent) -> None:
         self._edc = edc
         # XXX:
         #   This sequence is fragile as it requires:
@@ -148,9 +239,8 @@ class Batsim:
         #   ExternalDecisionComponent.
         self._send_edc_hello_msg()
 
-    def is_simulation_finished(self):
-        # Whether the even SimulationEnds has been received yet
-        return self._received_SimulationEnds
+    def is_simulation_finished(self) -> bool:
+        return self._received_SimulationEndsEvent
 
     def recv_msg(self) -> None:
         assert self._zmq_socket is not None, 'uninitialized _zmq_socket'
@@ -166,7 +256,7 @@ class Batsim:
             print(f'Received Batsim message: {protocol_dict}')
             self.deserialize_msg(protocol_dict)
 
-        except Exception:
+        except Exception:  # noqa: TRY203 (reason: due to the TODO on the next line)
             # TODO: handle json.loads and deserialization exceptions
             raise
 
@@ -175,7 +265,7 @@ class Batsim:
         assert self._edc is not None, 'uninitialized _edc'
         self._edc.handle_msg(self._rx)
 
-    def send_msg(self):
+    def send_msg(self) -> None:
         """Send the built answer message to Batsim."""
         protocol_dict = self.serialize_msg()
         print(f'Sending to Batsim:\n{protocol_dict}')
@@ -185,29 +275,75 @@ class Batsim:
     def pop_event(self) -> RxEvent:
         return self._rx.popleft()
 
-    def append_event(self, event: TxEvent):
+    def append_event(self, event: TxEvent) -> None:
         """Add event to the next message for Batsim."""
         if isinstance(event, RejectJobEvent):
-            # remove from alive_jobs as this is the last possible event sent to Batsim
-            self._alive_jobs.pop(event.job.job_id)
+            # Remove from _alive_jobs as RejectJobEvent is the last possible
+            # event sent to Batsim.
+            assert event.job.job_id not in self._zombie_jobs
+            del self._alive_jobs[event.job.job_id]
+
+        elif isinstance(event, KillJobsEvent):
+            # Extend lifetime of of jobs until we receive their death acknowledgment.
+            for job in event.jobs:
+                self._zombie_jobs[job.job_id] = job
+
+        elif isinstance(event, RegisterJobEvent):
+            # event.job is a dynamic job created by the EDC: keep track of it.
+            assert event.job.job_id not in self._alive_jobs
+            self._alive_jobs[event.job.job_id] = event.job
 
         self._tx.append(event)
 
     def deserialize_event(self, protocol_dict) -> RxEvent:
-        # hacky: inject jobs in protocol_dict when relevant
+        # For events only containing a job id, retrieve the corresponding Job
+        # object from _alive_jobs and inject it in protocol_dict.
+        # This allows RxEvent.from_protocol_dict to work with the correct objet.
         if protocol_dict['event_type'] == 'JobCompletedEvent':
-            # remove from alive_jobs as this is the last possible event from Batsim
+            # Remove job from _alive_jobs as this is the last related event
+            # received from Batsim.
+            # The job may still be present in _zombie_jobs.
             job = self._alive_jobs.pop(protocol_dict['event']['job_id'])
             protocol_dict['__pybatsim_job'] = job
+
+        elif protocol_dict['event_type'] == 'JobsKilledEvent':
+            dead_jobs = []
+            for job_id in protocol_dict['event']['job_ids']:
+                assert job_id not in self._alive_jobs
+                job = self._zombie_jobs.pop(job_id)
+                dead_jobs.append(job)
+            protocol_dict['__pybatsim_dead_jobs'] = dead_jobs
 
         event = RxEvent.from_protocol_dict(protocol_dict)
 
         if isinstance(event, SimulationEndsEvent):
-            self._received_SimulationEnds = True
+            self._received_SimulationEndsEvent = True
+
         elif isinstance(event, JobSubmittedEvent):
-            # TODO: handle case where job is a dynamic job and Batsim is asked
-            # to acknowledge dynamic jobs
-            self._alive_jobs[event.job.job_id] = event.job
+            # Batsim sends a full job description in a JobSubmittedEvent.
+            # The described job is either static or dynamic.
+            #   - in the former case, this is a new job: store it in _alive_jobs.
+            #   - in the latter case, retrieve the existing job and update in place.
+            new_job = event.job
+            job = self._alive_jobs.setdefault(new_job.job_id, new_job)
+
+            if job is not new_job:
+                # Dynamic jobs are submitted back by Batsim only if an
+                # acknowledgment is requested.
+                assert (
+                    SimulationFeatures.ACKNOWLEDGE_DYNAMIC_JOBS
+                    in self.simulation_metadata.requested_features
+                )
+
+                # Update the existing dynamic job in place.
+                assert job.submission_time is None, 'overwriting job.submission_time'
+                job.submission_time = new_job.submission_time
+
+                assert job.profile_dict is None, 'overwriting job.profile_dict'
+                job.profile_dict = new_job.profile_dict
+
+                # Reuse the existing dynamic job in the deserialized event.
+                event.job = job
 
         return event
 
@@ -217,7 +353,7 @@ class Batsim:
         assert self._time <= protocol_dict['now'], 'decreasing simulation time'
         self._time = protocol_dict['now']
 
-        # fill _rx buffer with the events received in current msg
+        # Fill _rx buffer with the events received in current msg.
         for event_dict in protocol_dict['events']:
             print('--- Received event of type', event_dict['event_type'])
             event = self.deserialize_event(event_dict)
@@ -228,3 +364,92 @@ class Batsim:
             'now': self._time,
             'events': [event.to_protocol_dict() for event in self._tx],
         }
+
+
+class ExternalDecisionComponent(Protocol):
+    def __init__(self, batsim: Batsim, options=None): ...
+
+    def handle_msg(self, msg: Iterable[RxEvent]) -> None: ...
+
+    def finalize(self) -> None: ...
+
+
+class Scheduler(ExternalDecisionComponent):
+    _batsim: Batsim
+    _options: str | None
+
+    def __init__(self, batsim: Batsim, options: str | None = None):
+        self._batsim = batsim
+        self._options = options
+
+    def handle_msg(self, msg: Iterable[RxEvent]) -> None:
+        for event in msg:
+            self._dispatch(event)
+
+    def _dispatch(self, event: RxEvent) -> None:
+        match event:
+            case JobSubmittedEvent():
+                self.handle_submitted_job(event)
+            case JobCompletedEvent():
+                self.handle_completed_job(event)
+            case JobsKilledEvent():
+                self.handle_jobs_killed(event)
+            case RequestedCallEvent():
+                self.handle_requested_call(event)
+            case ExternalEventOccurredEvent():
+                self.handle_external_event_occurred(event)
+            case HostsPStateChangedEvent():
+                self.handle_hosts_pstate_changed(event)
+            case HostsTurnedOnOffEvent():
+                self.handle_hosts_turned_onoff(event)
+            case SimulationBeginsEvent():
+                self.handle_simulation_begins(event)
+            case SimulationEndsEvent():
+                self.handle_simulation_ends(event)
+            case AllStaticJobsHaveBeenSubmittedEvent():
+                self.handle_no_more_static_jobs(event)
+            case AllStaticExternalEventsHaveBeenInjectedEvent():
+                self.handle_no_more_external_events(event)
+            case _:
+                err_msg = f"Unknown Event '{type(event).__name__}'"
+                raise TypeError(err_msg)
+
+    @abstractmethod
+    def handle_simulation_begins(self, event: SimulationBeginsEvent) -> None: ...
+
+    @abstractmethod
+    def handle_simulation_ends(self, event: SimulationEndsEvent) -> None: ...
+
+    @abstractmethod
+    def handle_submitted_job(self, event: JobSubmittedEvent) -> None: ...
+
+    @abstractmethod
+    def handle_completed_job(self, event: JobCompletedEvent) -> None: ...
+
+    def handle_jobs_killed(self, event: JobsKilledEvent) -> None:
+        pass
+
+    def handle_external_event_occurred(self, event: ExternalEventOccurredEvent) -> None:
+        pass
+
+    def handle_hosts_pstate_changed(self, event: HostsPStateChangedEvent) -> None:
+        pass
+
+    def handle_hosts_turned_onoff(self, event: HostsTurnedOnOffEvent) -> None:
+        pass
+
+    def handle_requested_call(self, event: RequestedCallEvent) -> None:
+        pass
+
+    def handle_no_more_static_jobs(
+        self, event: AllStaticJobsHaveBeenSubmittedEvent
+    ) -> None:
+        pass
+
+    def handle_no_more_external_events(
+        self, event: AllStaticExternalEventsHaveBeenInjectedEvent
+    ) -> None:
+        pass
+
+    def finalize(self):
+        pass
