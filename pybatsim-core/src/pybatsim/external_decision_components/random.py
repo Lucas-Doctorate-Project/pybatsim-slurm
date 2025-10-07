@@ -18,7 +18,7 @@ from pybatsim.batsim import (
 
 
 class RandomScheduler(Scheduler):
-    waiting_jobs: set[Job] = set()
+    waiting_jobs: set[Job]
     idle_resources: ProcSet | None = None
     cluster_size: int | None = None
     _generator: Random
@@ -38,6 +38,7 @@ class RandomScheduler(Scheduler):
             edc_commit='',
         )
         self._batsim.append_event(edc_hello_event)
+        self.waiting_jobs = set()
 
     def handle_msg(self, msg) -> None:
         super().handle_msg(msg)
@@ -64,6 +65,9 @@ class RandomScheduler(Scheduler):
             self.waiting_jobs.add(job)
 
     def handle_completed_job(self, event: JobCompletedEvent) -> None:
+        assert self.idle_resources is not None, (
+            'expected initialized idle_resources upon JobCompletedEvent'
+        )
         self.idle_resources |= event.job.allocation
 
     def schedule_jobs(self):

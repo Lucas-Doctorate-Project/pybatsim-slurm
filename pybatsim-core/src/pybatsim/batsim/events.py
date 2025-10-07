@@ -189,7 +189,7 @@ class JobCompletedEvent(RxEvent):
 class JobsKilledEvent(RxEvent):
     # TODO(rb): consider using a list of tuples
     jobs: list[Job]
-    progresses: dict[JobId, dict] = {}
+    progresses: dict[JobId, dict]
 
     @override
     def __init__(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Flag, FlagBoundary, auto
 
 
@@ -61,7 +61,9 @@ class SimulationMetadata:
     batsim_commit: str | None = None
 
     # simulation features requested by the EDC
-    requested_features: SimulationFeatures = SimulationFeatures.default()
+    requested_features: SimulationFeatures = field(
+        default_factory=SimulationFeatures.default
+    )
 
     def to_protocol_dict(self):
         return {

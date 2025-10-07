@@ -66,7 +66,7 @@ class TestArgumentsParsing:
     )
     def test_unknown_arguments(self, parser, capsys, args):
         with pytest.raises(SystemExit) as excinfo:
-            parser.parse_args(args + ['random'])
+            parser.parse_args([*args, 'random'])
         assert excinfo.value.code == self.PARSING_ERROR_RETURN_CODE
         stderr = capsys.readouterr().err
         assert ': error: unrecognized arguments:' in stderr
@@ -80,7 +80,7 @@ class TestArgumentsParsing:
     )
     def test_deprecated_arguments(self, parser, capsys, args):
         with pytest.raises(SystemExit) as excinfo:
-            parser.parse_args(args + ['random'])
+            parser.parse_args([*args, 'random'])
         assert excinfo.value.code == self.PARSING_ERROR_RETURN_CODE
         stderr = capsys.readouterr().err
         assert ': error: unrecognized arguments:' in stderr
@@ -175,4 +175,4 @@ class TestArgumentsParsing:
         args = ' '.join(combination)
         args = args.format(dir=scheduler_options_dir)  # inject path
         args = args.split()  # basic tokenization
-        parser.parse_args(args + ['random'])
+        parser.parse_args([*args, 'random'])
