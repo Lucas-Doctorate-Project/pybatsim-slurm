@@ -17,3 +17,4 @@ pybatsim = "^4.0.0a0"
 
 [tool.poetry.plugins."pybatsim.schedulers"]
 rejector = "universal_rejection:UniversalRejectionScheduler"
+slurm = "slurm:SlurmScheduler"
