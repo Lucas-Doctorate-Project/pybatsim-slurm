@@ -11,24 +11,8 @@ The format is based on `Keep a Changelog`_.
 Unreleased
 ----------
 
-- `Commits since v3.2.1 <https://gitlab.inria.fr/batsim/pybatsim/compare/v3.2.1...master>`_
+- `Commits since v3.2.0 <https://gitlab.inria.fr/batsim/pybatsim/compare/v3.2.0...master>`_
 - ``nix-env -f https://github.com/oar-team/nur-kapack/archive/master.tar.gz -iA pybatsim-master``
-
-
-........................................................................................................................
-
-v3.2.1
-------
-
-- Release date: 2021-12-15
-- `Commits since v3.2.0 <https://gitlab.inria.fr/batsim/pybatsim/compare/v3.2.0...v3.2.1>`_
-
-Miscellaneous
-~~~~~~~~~~~~~
-
-- Clean packaging:
-    - moved to poetry, a PEP517-compliant tool
-    - `pandas` dependency is now optional, use ``pip install pybatsim[tools]`` if you wish to keep previous behavior of ``pip install``
 
 
 ........................................................................................................................
@@ -57,7 +41,7 @@ Additions
 Miscellaneous
 ~~~~~~~~~~~~~
 
-- Example schedulers in the `schedulers` folder are now up-to-date, except from those in the `unMaintained` sub-folder.
+- Example schedulers in the `schedulers` folder are now up-to-date, except from those in the `unMaintained` sub-folder.
 
 
 ........................................................................................................................
