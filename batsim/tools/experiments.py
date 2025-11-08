@@ -196,7 +196,7 @@ def prepare_batsim_cl(options, verbose):
         delete_key(options, ["batsim", "workload-script"])
 
     if "config" in options["batsim"]:
-        options["batsim"]["config-file"] = generate_config(options)
+        options["batsim"]["sched-cfg-file"] = generate_config(options)
         delete_key(options, ["batsim", "config"])
 
     for key, val in options.get("batsim", {}).items():
