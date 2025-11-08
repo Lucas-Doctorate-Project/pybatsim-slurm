@@ -37,7 +37,10 @@ def main():
         loglevel = logging.getLevelName(arguments['--verbosity'].upper())
 
     FORMAT = '[pybatsim - %(asctime)s - %(name)s - %(levelname)s] %(message)s'
-    logging.basicConfig(format=FORMAT, level=loglevel)
+    #logging.basicConfig(format=FORMAT, level=loglevel) # Ao que parece, não aceita level como string.
+                                                        # Temos que criar uma função que converte
+                                                        # a string para um numeral compatível
+    logging.basicConfig(format=FORMAT, level=0)
 
     timeout = int(arguments['--timeout'] or float("inf"))
 
