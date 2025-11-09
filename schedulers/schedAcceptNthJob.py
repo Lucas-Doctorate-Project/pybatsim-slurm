@@ -1,6 +1,6 @@
 from batsim.batsim import BatsimScheduler
 
-class SchedRejectNthJob(BatsimScheduler):
+class SchedAcceptNthJob(BatsimScheduler):
     def onAfterBatsimInit(self):
         self.magic_number = 5
         self.count = 0
